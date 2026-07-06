@@ -6,6 +6,7 @@ import { useWorkoutStore } from '@/stores/useWorkoutStore'
 import { useProfileStore } from '@/stores/useProfileStore'
 import { AchievementToast } from '@/components/achievements/AchievementToast'
 import { ServiceWorkerRegister } from '@/components/layout/ServiceWorkerRegister'
+import { ThemeSync } from '@/components/layout/ThemeToggle'
 import { seedDemoData } from '@/lib/seed'
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -21,8 +22,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [])
 
   return (
-    <div className="min-h-screen text-white">
+    <div className="min-h-screen">
       <ServiceWorkerRegister />
+      <ThemeSync />
       <main className="pb-28">
         {children}
       </main>

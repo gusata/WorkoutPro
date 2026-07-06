@@ -12,20 +12,27 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
 
 export const Card = forwardRef<HTMLDivElement, CardProps>(
   ({ className, glow, pressable, glass, children, style, ...props }, ref) => {
-    const base = cn('rounded-2xl overflow-hidden', glass ? 'backdrop-blur-2xl' : '')
+    const base = cn('overflow-hidden', glass ? 'backdrop-blur-2xl' : '')
 
     const cardStyle: CSSProperties = glass
       ? {
-          background: 'rgba(255, 255, 255, 0.04)',
-          border: '1px solid rgba(255, 255, 255, 0.09)',
+          background: 'var(--glass)',
+          border: '1px solid color-mix(in srgb, var(--border) 84%, white 16%)',
+          backdropFilter: 'blur(28px) saturate(170%)',
+          WebkitBackdropFilter: 'blur(28px) saturate(170%)',
         }
       : {
-          background: '#111113',
-          border: '1px solid rgba(255, 255, 255, 0.06)',
+          background: 'var(--glass-strong)',
+          border: '1px solid var(--border)',
+          backdropFilter: 'blur(18px) saturate(150%)',
+          WebkitBackdropFilter: 'blur(18px) saturate(150%)',
         }
 
+    cardStyle.borderRadius = 'var(--card-radius)'
+    cardStyle.boxShadow = 'var(--shadow-soft)'
+
     if (glow) {
-      cardStyle.boxShadow = `0 0 0 1px ${glow}18, 0 8px 40px ${glow}14`
+      cardStyle.boxShadow = `0 18px 50px ${glow}18`
     }
 
     const combined: CSSProperties = { ...cardStyle, ...style }

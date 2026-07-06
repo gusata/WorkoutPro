@@ -24,34 +24,34 @@ export function RestTimerOverlay() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 20 }}
-          className="fixed bottom-24 left-0 right-0 z-40 flex justify-center px-4"
+          className="fixed bottom-44 left-0 right-0 z-40 flex justify-center px-4"
         >
-          <div className="flex items-center gap-4 rounded-2xl bg-zinc-900/95 border border-white/10 backdrop-blur-xl px-5 py-4 shadow-2xl w-full max-w-sm">
+          <div className="glass-panel flex w-full max-w-sm items-center gap-4 rounded-[26px] px-5 py-4">
             <CircularProgress
               value={restTotal - restSeconds}
               max={restTotal}
               size={56}
               strokeWidth={4}
-              color="#6366f1"
+              color="var(--accent)"
             >
-              <span className="text-xs font-bold text-white">{restSeconds}</span>
+              <span className="text-xs font-bold text-[var(--foreground)]">{restSeconds}</span>
             </CircularProgress>
 
             <div className="flex-1">
-              <p className="text-xs text-zinc-400 font-medium">DESCANSO</p>
-              <p className="text-xl font-bold text-white">{formatDuration(restSeconds)}</p>
+              <p className="text-xs text-[var(--muted)] font-medium">DESCANSO</p>
+              <p className="text-xl font-bold text-[var(--foreground)]">{formatDuration(restSeconds)}</p>
             </div>
 
             <div className="flex gap-2">
               <button
                 onClick={() => startRest(restTotal)}
-                className="rounded-xl p-2 bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white transition-colors"
+                className="rounded-xl p-2 bg-[var(--surface-2)] text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
               >
                 <SkipForward size={16} />
               </button>
               <button
                 onClick={stopRest}
-                className="rounded-xl p-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 transition-colors"
+                className="rounded-xl p-2 bg-rose-500/15 hover:bg-rose-500/25 text-rose-500 transition-colors"
               >
                 <X size={16} />
               </button>
@@ -77,8 +77,8 @@ export function RestPresetPicker({ currentSeconds, onSelect }: RestPresetPickerP
           onClick={() => onSelect(s)}
           className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
             currentSeconds === s
-              ? 'bg-indigo-500 text-white'
-              : 'bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white'
+              ? 'bg-[var(--accent)] text-white'
+              : 'bg-[var(--surface-2)] text-[var(--muted)] hover:text-[var(--foreground)]'
           }`}
         >
           {s}s

@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { motion } from 'framer-motion'
-import { User, Weight, Plus, Trash2, Download, Upload, Edit3, Check, Shield } from 'lucide-react'
+import { User, Weight, Plus, Trash2, Download, Upload, Edit3, Check, Shield, Palette } from 'lucide-react'
 import { LineChart, Line, XAxis, ResponsiveContainer, Tooltip } from 'recharts'
 import { useProfileStore } from '@/stores/useProfileStore'
 import { Card } from '@/components/ui/Card'
@@ -10,6 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { Progress } from '@/components/ui/Progress'
+import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { getLevelFromXp, levelTitle } from '@/lib/gamification'
 import { exportData, importData } from '@/lib/db'
 import { formatDate } from '@/lib/utils'
@@ -250,6 +250,21 @@ export default function ProfilePage() {
           </div>
         )}
       </div>
+
+      <Card className="p-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="soft-icon flex h-11 w-11 items-center justify-center rounded-2xl">
+              <Palette size={18} />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-white">Aparencia</h2>
+              <p className="text-xs text-zinc-500">Alternar entre tema claro e escuro</p>
+            </div>
+          </div>
+          <ThemeToggle />
+        </div>
+      </Card>
 
       {/* Backup */}
       <Card className="p-4">

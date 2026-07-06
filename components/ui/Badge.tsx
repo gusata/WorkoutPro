@@ -17,7 +17,7 @@ export function Badge({ children, color, className, size = 'md' }: BadgeProps) {
       className={cn(
         'inline-flex items-center gap-1 rounded-full font-semibold',
         sizes[size],
-        !color && 'bg-white/10 text-zinc-300',
+        !color && 'bg-[var(--surface-2)] text-[var(--muted-strong)]',
         className
       )}
       style={

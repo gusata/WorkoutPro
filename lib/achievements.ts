@@ -1,4 +1,4 @@
-import type { AchievementDef, UserProfile, WorkoutSession } from '@/types'
+import type { AchievementDef } from '@/types'
 
 export const ACHIEVEMENTS: AchievementDef[] = [
   {

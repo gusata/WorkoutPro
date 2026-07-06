@@ -1,0 +1,86 @@
+generated: "2026-07-06"
+source: "CODEBASE.md"
+version: "1.0"
+
+mappings:
+  routes:
+    paths:
+      - "app"
+    priority: 10
+    pattern: "app/**/page.tsx"
+    description: "Next.js App Router pages and layout files"
+  components:
+    paths:
+      - "components"
+    priority: 10
+    pattern: "components/**/*.tsx"
+    description: "Reusable layout, navigation, timer, achievement, and UI components"
+  services:
+    paths:
+      - "lib"
+    priority: 5
+    pattern: "lib/**/*.ts"
+    description: "Domain logic, persistence, notifications, utilities, seed data, and plugin bridges"
+  stores:
+    paths:
+      - "stores"
+    priority: 10
+    pattern: "stores/**/*.ts"
+    description: "Zustand state stores"
+  types:
+    paths:
+      - "types"
+    priority: 10
+    pattern: "types/**/*.ts"
+    description: "Shared TypeScript domain models"
+  config:
+    paths:
+      - "."
+      - "android"
+    priority: 5
+    pattern: "*config*|*.json|*.mjs|android/**/*.gradle|android/**/AndroidManifest.xml"
+    description: "Next, TypeScript, ESLint, PostCSS, Capacitor, and Android configuration"
+  assets:
+    paths:
+      - "public"
+      - "icons"
+      - "assets"
+    priority: 5
+    pattern: "public/**/*|icons/**/*|assets/**/*"
+    description: "PWA icons, splash images, static assets, service worker"
+  styles:
+    paths:
+      - "app/globals.css"
+    priority: 10
+    pattern: "app/**/*.css"
+    description: "Global Tailwind/CSS styles"
+  native:
+    paths:
+      - "android/app/src/main/java/com/workoutpro/app"
+      - "android/app/src/main/res"
+    priority: 10
+    pattern: "android/app/src/main/**/*"
+    description: "Capacitor Android native plugin, service, manifest, and resources"
+  tests:
+    paths:
+      - "android/app/src/test"
+      - "android/app/src/androidTest"
+    priority: 1
+    pattern: "**/*.test.*|**/*Test.java"
+    description: "Generated Android example tests; no authored JS/TS tests detected"
+
+rules:
+  strictness: warn
+  exceptions:
+    - "Generated outputs under .next/, out/, node_modules/, and android/app/build/ are excluded from source mapping."
+
+autoUpdate:
+  enabled: true
+  mode: "prompt"
+  threshold:
+    newDirectoryFiles: 3
+    newCategoryFiles: 10
+    categoryChangePercent: 20
+  backup:
+    enabled: true
+    keepCount: 5

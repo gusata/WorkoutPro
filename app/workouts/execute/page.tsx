@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X, Check, Plus, Timer, ChevronDown, ChevronUp,
-  Trophy, Zap, Clock, Minus, Share2
+  Trophy, Zap, Clock, Minus, Share2, Trash2
 } from 'lucide-react'
 import { useSessionStore } from '@/stores/useSessionStore'
 import { useTimerStore } from '@/stores/useTimerStore'
@@ -20,21 +20,21 @@ function NumberInput({ value, onChange, min = 0, step = 1, suffix }: {
   value: number, onChange: (v: number) => void, min?: number, step?: number, suffix?: string
 }) {
   return (
-    <div className="flex items-center justify-center gap-0.5">
+    <div className="flex min-w-0 items-center justify-center gap-0.5">
       <button
         onClick={() => onChange(Math.max(min, value - step))}
-        className="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-400 active:scale-90 transition-all"
+        className="flex h-6 w-6 flex-none items-center justify-center rounded-lg text-zinc-400 transition-all active:scale-90"
         style={{ background: 'rgba(255,255,255,0.06)' }}
       >
         <Minus size={11} />
       </button>
-      <div className="text-center min-w-[38px]">
-        <span className="text-sm font-bold text-white tabular-nums">{value}</span>
+      <div className="min-w-[30px] text-center">
+        <span className="text-xs font-bold text-white tabular-nums">{value}</span>
         {suffix && <span className="text-[10px] text-zinc-500 ml-0.5">{suffix}</span>}
       </div>
       <button
         onClick={() => onChange(value + step)}
-        className="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-400 active:scale-90 transition-all"
+        className="flex h-6 w-6 flex-none items-center justify-center rounded-lg text-zinc-400 transition-all active:scale-90"
         style={{ background: 'rgba(255,255,255,0.06)' }}
       >
         <Plus size={11} />
@@ -46,7 +46,7 @@ function NumberInput({ value, onChange, min = 0, step = 1, suffix }: {
 export default function ExecutePage() {
   const router = useRouter()
   const { active, updateSet, completeSet, addSet, removeSet, setRestSeconds, endSession, discardSession } = useSessionStore()
-  const { workoutSeconds, workoutRunning, startWorkoutTimer, stopWorkoutTimer, resetWorkoutTimer, startRest, tickWorkout } = useTimerStore()
+  const { workoutSeconds, workoutRunning, startWorkoutTimer, stopWorkoutTimer, resetWorkoutTimer, startRest, tickWorkout, tickRest } = useTimerStore()
   const { load: reloadProfile, checkAchievements } = useProfileStore()
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
@@ -72,6 +72,19 @@ export default function ExecutePage() {
     const interval = setInterval(tickWorkout, 1000)
     return () => clearInterval(interval)
   }, [workoutRunning, tickWorkout])
+
+  // Recalculate both timers from wall-clock the moment the app returns to foreground.
+  // setInterval is throttled/paused by Android when backgrounded; this gives instant correction.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        tickWorkout()
+        tickRest()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [tickWorkout, tickRest])
 
   const totalCompleted = active?.exercises.reduce(
     (acc, ex) => acc + ex.sets.filter((s) => s.completed).length, 0
@@ -201,29 +214,32 @@ export default function ExecutePage() {
 
   return (
     <div className="min-h-screen page-content">
-      {/* Header */}
-      <div
-        className="sticky top-0 z-30 px-4 pt-12 pb-4 border-b border-white/5"
-        style={{ background: 'rgba(10,10,10,0.92)', backdropFilter: 'blur(16px)' }}
-      >
-        <div className="flex items-center gap-3 mb-3 max-w-lg mx-auto">
-          <div className="w-3 h-3 rounded-full flex-none" style={{ background: active.workoutColor }} />
-          <h1 className="flex-1 font-bold text-white">{active.workoutName}</h1>
-          <div className="flex items-center gap-1 text-sm text-zinc-400">
+      {/* Floating workout controls */}
+      <div className="sticky top-0 z-30 px-4 pb-4 pt-8 pointer-events-none">
+        <div className="mx-auto mb-3 flex max-w-lg items-center gap-2">
+          <div className="workout-bubble pointer-events-auto flex min-w-0 flex-1 items-center gap-3 rounded-full px-3.5 py-2.5">
+            <div className="h-3 w-3 flex-none rounded-full" style={{ background: active.workoutColor }} />
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-sm font-bold text-white">{active.workoutName}</h1>
+              <p className="text-[11px] text-zinc-500">{totalCompleted} / {totalSets} series</p>
+            </div>
+          </div>
+          <div className="workout-bubble pointer-events-auto flex flex-none items-center gap-1.5 rounded-full px-3.5 py-2.5 text-sm text-zinc-400">
             <Clock size={14} />
             <span className="font-mono font-semibold">{formatDuration(workoutSeconds)}</span>
           </div>
           <button
             onClick={() => setConfirmDiscard(true)}
-            className="rounded-lg p-1.5 text-zinc-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
+            className="workout-bubble pointer-events-auto flex h-11 w-11 flex-none items-center justify-center rounded-full text-zinc-600 transition-all hover:text-rose-400"
+            aria-label="Cancelar treino"
           >
             <X size={16} />
           </button>
         </div>
 
-        {/* Progress bar */}
-        <div className="max-w-lg mx-auto">
-          <div className="flex justify-between text-xs text-zinc-600 mb-1">
+        {/* Progress bubble */}
+        <div className="workout-bubble pointer-events-auto mx-auto max-w-lg rounded-full px-3 py-2">
+          <div className="flex justify-between text-[11px] text-zinc-600 mb-1">
             <span>{totalCompleted} / {totalSets} séries</span>
             <span>{Math.round((totalCompleted / Math.max(totalSets, 1)) * 100)}%</span>
           </div>
@@ -239,7 +255,7 @@ export default function ExecutePage() {
       </div>
 
       {/* Exercises */}
-      <div className="px-4 py-4 space-y-4 max-w-lg mx-auto pb-32">
+      <div className="mx-auto max-w-lg space-y-4 px-4 py-4 pb-64">
         {active.exercises.map((ex) => {
           const isCollapsed = collapsed[ex.exerciseId]
           const completedSets = ex.sets.filter((s) => s.completed).length
@@ -270,12 +286,13 @@ export default function ExecutePage() {
               </button>
 
               {!isCollapsed && (
-                <div className="px-4 pb-4 space-y-2">
+                <div className="space-y-2 px-3 pb-4 sm:px-4">
                   {/* Column headers */}
-                  <div className="grid grid-cols-[22px_1fr_1fr_36px] gap-2 text-[10px] text-zinc-600 px-1 mb-1">
+                  <div className="mb-1 grid grid-cols-[18px_minmax(68px,1fr)_minmax(68px,1fr)_32px_32px] gap-1 px-1 text-[9px] text-zinc-600">
                     <span className="text-center">#</span>
-                    <span className="text-center font-medium">PESO (kg)</span>
+                    <span className="text-center font-medium">PESO</span>
                     <span className="text-center font-medium">REPS</span>
+                    <span />
                     <span />
                   </div>
 
@@ -287,7 +304,7 @@ export default function ExecutePage() {
                         initial={{ opacity: 0, x: -12 }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: 12 }}
-                        className="grid grid-cols-[22px_1fr_1fr_36px] gap-2 items-center rounded-xl px-2 py-2.5 transition-all"
+                        className="grid grid-cols-[18px_minmax(68px,1fr)_minmax(68px,1fr)_32px_32px] gap-1 items-center rounded-xl px-1.5 py-2.5 transition-all"
                         style={set.completed
                           ? { background: 'rgba(0,200,150,0.08)', border: '1px solid rgba(0,200,150,0.18)' }
                           : { background: 'rgba(255,255,255,0.03)' }
@@ -308,13 +325,24 @@ export default function ExecutePage() {
 
                         <button
                           onClick={() => handleCompleteSet(ex.exerciseId, set.id)}
-                          className="w-9 h-9 rounded-xl flex items-center justify-center transition-all active:scale-90 flex-none"
+                          className="flex h-8 w-8 flex-none items-center justify-center rounded-xl transition-all active:scale-90"
                           style={set.completed
                             ? { background: '#00c896', color: '#080809' }
                             : { background: 'rgba(255,255,255,0.06)', color: '#71717a' }
                           }
                         >
                           <Check size={15} />
+                        </button>
+
+                        <button
+                          onClick={() => removeSet(ex.exerciseId, set.id)}
+                          disabled={ex.sets.length <= 1}
+                          className="flex h-8 w-8 flex-none items-center justify-center rounded-xl transition-all active:scale-90 disabled:pointer-events-none disabled:opacity-30"
+                          style={{ background: 'rgba(244,63,94,0.1)', color: '#f43f5e' }}
+                          aria-label="Remover serie"
+                          title={ex.sets.length <= 1 ? 'Mantenha pelo menos uma serie' : 'Remover serie'}
+                        >
+                          <Trash2 size={14} />
                         </button>
                       </motion.div>
                     ))}
@@ -355,7 +383,7 @@ export default function ExecutePage() {
       </div>
 
       {/* Finish button */}
-      <div className="fixed bottom-20 left-0 right-0 flex justify-center px-4 pointer-events-none z-20">
+      <div className="fixed bottom-28 left-0 right-0 z-30 flex justify-center px-4 pointer-events-none">
         <Button
           size="lg"
           className="w-full max-w-sm pointer-events-auto shadow-2xl shadow-indigo-500/20"
