@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { Progress } from '@/components/ui/Progress'
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
+import { VisualEffectsToggle } from '@/components/layout/VisualEffectsToggle'
 import { getLevelFromXp, levelTitle } from '@/lib/gamification'
 import { exportData, importData } from '@/lib/db'
 import { formatDate } from '@/lib/utils'
@@ -39,6 +40,7 @@ export default function ProfilePage() {
   const [editName, setEditName]   = useState(false)
   const [nameInput, setNameInput] = useState(profile?.name ?? '')
   const [measForm, setMeasForm]   = useState<Record<string, string>>({})
+  const [importStatus, setImportStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   const levelInfo = profile
     ? getLevelFromXp(profile.xp)
@@ -85,12 +87,13 @@ export default function ProfilePage() {
 
   async function handleImport(file: File) {
     try {
+      setImportStatus(null)
       const text = await file.text()
       await importData(JSON.parse(text))
       await load()
-      alert('Dados importados com sucesso!')
+      setImportStatus({ type: 'success', message: 'Dados importados com sucesso.' })
     } catch {
-      alert('Erro ao importar. Verifique o arquivo.')
+      setImportStatus({ type: 'error', message: 'Nao foi possivel importar. Verifique o arquivo.' })
     }
   }
 
@@ -103,10 +106,10 @@ export default function ProfilePage() {
   )
 
   return (
-    <div className="px-4 pt-14 pb-4 page-content max-w-lg mx-auto space-y-5">
+    <div className="px-4 pt-14 pb-28 page-content max-w-lg mx-auto space-y-5">
       <div>
-        <p className="text-xs text-zinc-500">Seu</p>
-        <h1 className="text-2xl font-bold text-white tracking-tight">Perfil</h1>
+        <p className="text-sm font-medium text-zinc-500">Seu</p>
+        <h1 className="text-3xl font-bold tracking-tight text-white">Perfil</h1>
       </div>
 
       {/* Identity card — glass */}
@@ -146,7 +149,7 @@ export default function ProfilePage() {
                 </button>
               </div>
             )}
-            <p className="text-sm font-semibold mt-0.5" style={{ color: INDIGO }}>
+            <p className="text-sm font-medium mt-0.5" style={{ color: INDIGO }}>
               {levelTitle(levelInfo.level)}
             </p>
           </div>
@@ -264,6 +267,9 @@ export default function ProfilePage() {
           </div>
           <ThemeToggle />
         </div>
+        <div className="mt-3">
+          <VisualEffectsToggle />
+        </div>
       </Card>
 
       {/* Backup */}
@@ -290,6 +296,18 @@ export default function ProfilePage() {
             </Button>
           </label>
         </div>
+        {importStatus && (
+          <p
+            className="mt-3 rounded-2xl px-3 py-2 text-xs font-medium"
+            style={{
+              background: importStatus.type === 'success' ? 'rgba(34, 197, 94, 0.12)' : 'rgba(244, 63, 94, 0.12)',
+              color: importStatus.type === 'success' ? 'var(--accent-green)' : '#f43f5e',
+              border: `1px solid ${importStatus.type === 'success' ? 'rgba(34, 197, 94, 0.18)' : 'rgba(244, 63, 94, 0.18)'}`,
+            }}
+          >
+            {importStatus.message}
+          </p>
+        )}
         <p className="text-[11px] text-zinc-700 mt-3 text-center">
           Todos os dados ficam no seu dispositivo, sem nenhum servidor.
         </p>

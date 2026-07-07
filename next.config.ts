@@ -13,7 +13,7 @@ const nextConfig: NextConfig = {
   },
 
   experimental: {
-    optimizePackageImports: ["next/font"],
+    optimizePackageImports: ["next/font", "lucide-react", "date-fns", "recharts"],
   },
 };
 

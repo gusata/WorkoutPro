@@ -19,6 +19,7 @@ import { ptBR } from 'date-fns/locale'
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from 'recharts'
 import { BarChart3, CalendarDays, ChevronLeft, ChevronRight, Clock, Dumbbell, TrendingUp, Weight } from 'lucide-react'
 import { useProfileStore } from '@/stores/useProfileStore'
+import { useWorkoutStore } from '@/stores/useWorkoutStore'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { formatDuration, formatVolume } from '@/lib/utils'
@@ -83,6 +84,7 @@ function CountTooltip({ active, payload, label }: {
 
 export default function StatsPage() {
   const { sessions } = useProfileStore()
+  const { workouts, exercises } = useWorkoutStore()
   const [period, setPeriod] = useState<Period>('month')
   const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()))
   const [selectedDate, setSelectedDate] = useState(() => new Date())
@@ -113,6 +115,8 @@ export default function StatsPage() {
     const key = format(selectedDate, 'yyyy-MM-dd')
     return sessionsByDay.get(key) ?? []
   }, [selectedDate, sessionsByDay])
+  const workoutNames = useMemo(() => new Map(workouts.map((workout) => [workout.id, workout.name])), [workouts])
+  const exerciseNames = useMemo(() => new Map(exercises.map((exercise) => [exercise.id, exercise.name])), [exercises])
 
   const calendarDays = useMemo(() => {
     const start = startOfWeek(startOfMonth(calendarMonth), { weekStartsOn: 0 })
@@ -191,16 +195,19 @@ export default function StatsPage() {
         <h1 className="mt-1 text-3xl font-bold tracking-tight text-[var(--foreground)]">Estatisticas</h1>
       </header>
 
-      <div className="glass-panel grid grid-cols-3 gap-1 rounded-full p-1">
+      <div
+        className="grid grid-cols-3 gap-1 rounded-xl p-1"
+        style={{ background: 'var(--glass-strong)', border: '1px solid var(--border)' }}
+      >
         {PERIODS.map((item) => (
           <button
             key={item.value}
             type="button"
             onClick={() => setPeriod(item.value)}
-            className="h-10 rounded-full text-sm font-bold transition"
+            className="h-10 rounded-lg text-sm font-bold transition"
             style={
               period === item.value
-                ? { background: 'var(--foreground)', color: 'var(--background)' }
+                ? { background: 'var(--accent)', color: 'white' }
                 : { color: 'var(--muted)' }
             }
           >
@@ -337,15 +344,54 @@ export default function StatsPage() {
             {format(selectedDate, "d 'de' MMMM", { locale: ptBR })}
           </p>
           {selectedSessions.length > 0 ? (
-            <div className="mt-2 space-y-2">
-              {selectedSessions.map((session) => (
-                <div key={session.id} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="font-semibold text-[var(--foreground)]">
-                    {session.exercises.reduce((total, exercise) => total + exercise.sets.length, 0)} series
-                  </span>
-                  <span className="text-[var(--muted)]">{formatVolume(session.totalVolume)}</span>
+            <div className="mt-3 space-y-3">
+              {selectedSessions.map((session) => {
+                const setCount = session.exercises.reduce((total, exercise) => total + exercise.sets.length, 0)
+                const exerciseList = session.exercises
+                  .map((exercise) => exerciseNames.get(exercise.exerciseId))
+                  .filter(Boolean)
+                  .slice(0, 4)
+                  .join(', ')
+
+                return (
+                  <div key={session.id} className="rounded-2xl bg-[var(--surface)] p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-[var(--foreground)]">
+                          {workoutNames.get(session.workoutId) ?? 'Treino'}
+                        </p>
+                        <p className="mt-0.5 text-xs text-[var(--muted)]">
+                          {setCount} series - {formatDuration(session.duration)}
+                        </p>
+                      </div>
+                      <span className="flex-none text-sm font-bold text-[var(--accent)]">
+                        {formatVolume(session.totalVolume)}
+                      </span>
+                    </div>
+                    {exerciseList && (
+                      <p className="mt-2 line-clamp-2 text-xs text-[var(--muted)]">{exerciseList}</p>
+                    )}
+                  </div>
+                )
+              })}
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-2xl bg-[var(--surface)] p-2">
+                  <p className="text-sm font-bold text-[var(--foreground)]">{selectedSessions.length}</p>
+                  <p className="text-[10px] text-[var(--muted)]">treinos</p>
                 </div>
-              ))}
+                <div className="rounded-2xl bg-[var(--surface)] p-2">
+                  <p className="text-sm font-bold text-[var(--foreground)]">
+                    {formatVolume(selectedSessions.reduce((total, session) => total + session.totalVolume, 0))}
+                  </p>
+                  <p className="text-[10px] text-[var(--muted)]">volume</p>
+                </div>
+                <div className="rounded-2xl bg-[var(--surface)] p-2">
+                  <p className="text-sm font-bold text-[var(--foreground)]">
+                    {formatDuration(selectedSessions.reduce((total, session) => total + session.duration, 0))}
+                  </p>
+                  <p className="text-[10px] text-[var(--muted)]">tempo</p>
+                </div>
+              </div>
             </div>
           ) : (
             <p className="mt-2 text-sm text-[var(--muted)]">Nenhum treino registrado nesse dia.</p>

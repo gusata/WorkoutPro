@@ -112,6 +112,7 @@ export interface ActiveExercise {
   exerciseId: string
   exerciseName: string
   muscleGroup: string
+  notes?: string
   sets: ActiveSet[]
   restSeconds: number
 }

@@ -1,12 +1,11 @@
 'use client'
 
 import { Suspense, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useSearchParams } from 'next/navigation'
-import { Reorder, useDragControls } from 'framer-motion'
-import { motion } from 'framer-motion'
 import {
-  ArrowLeft, Play, Plus, Trash2, Search, ChevronDown, ChevronUp, GripVertical
+  ArrowLeft, Play, Plus, Trash2, Search, ChevronDown, ChevronUp, ArrowUp, ArrowDown
 } from 'lucide-react'
 import { useWorkoutStore } from '@/stores/useWorkoutStore'
 import { useSessionStore } from '@/stores/useSessionStore'
@@ -17,6 +16,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import { Input, Select, TextArea } from '@/components/ui/Input'
 import { MUSCLE_GROUPS, formatVolume, formatDate } from '@/lib/utils'
+import { getExerciseHistory, getExerciseRecords } from '@/lib/exerciseHistory'
 import type { Exercise, WorkoutSession } from '@/types'
 
 const GREEN  = '#00c896'
@@ -27,36 +27,46 @@ interface ExerciseRowProps {
   workoutColor: string
   sessions: WorkoutSession[]
   isOpen: boolean
+  canMoveUp: boolean
+  canMoveDown: boolean
   onToggle: () => void
   onRemove: () => void
+  onMoveUp: () => void
+  onMoveDown: () => void
 }
 
-function ExerciseRow({ ex, workoutColor, sessions, isOpen, onToggle, onRemove }: ExerciseRowProps) {
-  const dragControls = useDragControls()
-
+function ExerciseRow({ ex, workoutColor, sessions, isOpen, canMoveUp, canMoveDown, onToggle, onRemove, onMoveUp, onMoveDown }: ExerciseRowProps) {
   const exSessions  = sessions.flatMap((s) => s.exercises.filter((se) => se.exerciseId === ex.id))
   const allSets     = exSessions.flatMap((se) => se.sets)
+  const records = getExerciseRecords(getExerciseHistory(ex.id, sessions, []))
   const bestWeight  = allSets.length > 0 ? Math.max(...allSets.map((s) => s.weight)) : 0
   const bestVolume  = exSessions.length > 0
     ? Math.max(...exSessions.map((se) => se.sets.reduce((a, s) => a + s.weight * s.reps, 0)))
     : 0
 
   return (
-    <Reorder.Item
-      value={ex.id}
-      dragControls={dragControls}
-      dragListener={false}
-      className="list-none"
-      style={{ position: 'relative' }}
-    >
+    <div className="list-none">
       <Card>
         <div className="flex items-center">
-          {/* Drag handle */}
-          <div
-            className="pl-4 pr-1 py-4 touch-none cursor-grab active:cursor-grabbing text-zinc-700 hover:text-zinc-400 transition-colors flex-none"
-            onPointerDown={(e) => dragControls.start(e)}
-          >
-            <GripVertical size={16} />
+          <div className="flex flex-col gap-1 pl-3 pr-1 py-3 flex-none">
+            <button
+              type="button"
+              onClick={onMoveUp}
+              disabled={!canMoveUp}
+              className="rounded-lg p-1 text-zinc-600 transition-colors disabled:opacity-25 hover:text-zinc-300"
+              aria-label="Mover exercicio para cima"
+            >
+              <ArrowUp size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={onMoveDown}
+              disabled={!canMoveDown}
+              className="rounded-lg p-1 text-zinc-600 transition-colors disabled:opacity-25 hover:text-zinc-300"
+              aria-label="Mover exercicio para baixo"
+            >
+              <ArrowDown size={13} />
+            </button>
           </div>
 
           {/* Expand button */}
@@ -75,6 +85,13 @@ function ExerciseRow({ ex, workoutColor, sessions, isOpen, onToggle, onRemove }:
               <p className="text-xs text-zinc-500">{ex.muscleGroup}</p>
             </div>
             <div className="flex items-center gap-1">
+              <Link
+                href={`/exercises/detail?id=${ex.id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="rounded-full bg-[var(--surface-2)] px-2.5 py-1 text-[11px] font-bold text-[var(--accent)]"
+              >
+                PRs
+              </Link>
               <button
                 onClick={(e) => { e.stopPropagation(); onRemove() }}
                 className="p-1.5 rounded-lg text-zinc-700 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
@@ -89,11 +106,7 @@ function ExerciseRow({ ex, workoutColor, sessions, isOpen, onToggle, onRemove }:
         </div>
 
         {isOpen && (
-          <motion.div
-            initial={{ height: 0 }}
-            animate={{ height: 'auto' }}
-            className="overflow-hidden"
-          >
+          <div className="overflow-hidden">
             <div
               className="px-4 pb-4 grid grid-cols-2 gap-2 pt-3"
               style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}
@@ -107,6 +120,16 @@ function ExerciseRow({ ex, workoutColor, sessions, isOpen, onToggle, onRemove }:
                   <p className="font-bold text-white mt-0.5">{item.value}</p>
                 </div>
               ))}
+              <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                <p className="text-[11px] text-zinc-500">1RM estimado</p>
+                <p className="font-bold text-white mt-0.5">
+                  {records.bestEstimatedOneRm > 0 ? `${records.bestEstimatedOneRm.toFixed(1)}kg` : '---'}
+                </p>
+              </div>
+              <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                <p className="text-[11px] text-zinc-500">Sessoes</p>
+                <p className="font-bold text-white mt-0.5">{records.sessions}</p>
+              </div>
               {ex.notes && (
                 <div className="col-span-2 rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)' }}>
                   <p className="text-[11px] text-zinc-500 mb-1">Observações</p>
@@ -114,10 +137,10 @@ function ExerciseRow({ ex, workoutColor, sessions, isOpen, onToggle, onRemove }:
                 </div>
               )}
             </div>
-          </motion.div>
+          </div>
         )}
       </Card>
-    </Reorder.Item>
+    </div>
   )
 }
 
@@ -168,8 +191,19 @@ function WorkoutDetail() {
     setExName(''); setExNotes(''); setShowExModal(false)
   }
 
+  function moveExercise(exerciseId: string, direction: -1 | 1) {
+    const currentIndex = workout!.exerciseIds.indexOf(exerciseId)
+    const nextIndex = currentIndex + direction
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= workout!.exerciseIds.length) return
+
+    const nextOrder = [...workout!.exerciseIds]
+    const [item] = nextOrder.splice(currentIndex, 1)
+    nextOrder.splice(nextIndex, 0, item)
+    reorderExercises(id, nextOrder)
+  }
+
   return (
-    <div className="px-4 pt-14 pb-4 page-content max-w-lg mx-auto">
+    <div className="px-4 pt-14 pb-28 page-content max-w-lg mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <button
@@ -198,25 +232,23 @@ function WorkoutDetail() {
           <p className="text-sm text-zinc-600">Nenhum exercício adicionado</p>
         </div>
       ) : (
-        <Reorder.Group
-          axis="y"
-          values={workout.exerciseIds}
-          onReorder={(newOrder) => reorderExercises(id, newOrder)}
-          as="div"
-          className="space-y-2 mb-5"
-        >
-          {workoutExercises?.map((ex) => (
+        <div className="space-y-2 mb-5">
+          {workoutExercises?.map((ex, index) => (
             <ExerciseRow
               key={ex.id}
               ex={ex}
               workoutColor={workout.color}
               sessions={sessions}
               isOpen={expanded === ex.id}
+              canMoveUp={index > 0}
+              canMoveDown={index < workoutExercises.length - 1}
               onToggle={() => setExpanded(expanded === ex.id ? null : ex.id)}
               onRemove={() => removeExerciseFromWorkout(id, ex.id)}
+              onMoveUp={() => moveExercise(ex.id, -1)}
+              onMoveDown={() => moveExercise(ex.id, 1)}
             />
           ))}
-        </Reorder.Group>
+        </div>
       )}
 
       <Button variant="outline" className="w-full mb-6" onClick={() => setShowAddModal(true)}>

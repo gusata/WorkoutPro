@@ -2,39 +2,74 @@
 
 import { useMemo } from 'react'
 import Link from 'next/link'
-import { motion } from 'framer-motion'
+import { useRouter } from 'next/navigation'
 import {
   Activity,
-  Bell,
-  ChevronRight,
+  ArrowRight,
+  CalendarDays,
   Clock,
   Dumbbell,
   Flame,
-  Play,
+  Plus,
+  Ruler,
+  Sparkles,
+  Target,
   Trophy,
   Weight,
-  Zap,
 } from 'lucide-react'
-import { startOfWeek, endOfWeek, isWithinInterval } from 'date-fns'
+import {
+  addDays,
+  differenceInCalendarDays,
+  endOfWeek,
+  isSameDay,
+  isWithinInterval,
+  startOfWeek,
+} from 'date-fns'
 import { useProfileStore } from '@/stores/useProfileStore'
-import { useWorkoutStore } from '@/stores/useWorkoutStore'
 import { useSessionStore } from '@/stores/useSessionStore'
+import { useWorkoutStore } from '@/stores/useWorkoutStore'
+import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Progress } from '@/components/ui/Progress'
 import { getLevelFromXp, levelTitle } from '@/lib/gamification'
-import { formatVolume, formatDuration, formatDate } from '@/lib/utils'
+import { formatDate, formatDuration, formatVolume } from '@/lib/utils'
+import type { Workout, WorkoutSession } from '@/types'
 
 const CORAL = '#e65f43'
 const AMBER = '#f59e0b'
 const INK = '#1f2024'
+const WEEK_TARGET = 4
+const WEEK_DAYS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 14 },
-  show: (i: number) => ({
-    opacity: 1,
-    y: 0,
-    transition: { delay: i * 0.05, duration: 0.34, ease: 'easeOut' as const },
-  }),
+function daysAgoLabel(date: Date | null) {
+  if (!date) return 'Nunca feito'
+
+  const diff = differenceInCalendarDays(new Date(), date)
+  if (diff <= 0) return 'Hoje'
+  if (diff === 1) return 'Ontem'
+  return `Ha ${diff} dias`
+}
+
+function getSessionDate(session: WorkoutSession) {
+  return new Date(session.finishedAt ?? session.startedAt)
+}
+
+function findSuggestedWorkout(workouts: Workout[], sessions: WorkoutSession[]) {
+  if (workouts.length === 0) return null
+
+  const lastByWorkout = new Map<string, Date>()
+  sessions.forEach((session) => {
+    if (!session.finishedAt) return
+    const current = lastByWorkout.get(session.workoutId)
+    const date = new Date(session.finishedAt)
+    if (!current || date > current) lastByWorkout.set(session.workoutId, date)
+  })
+
+  return [...workouts].sort((a, b) => {
+    const aLast = lastByWorkout.get(a.id)?.getTime() ?? 0
+    const bLast = lastByWorkout.get(b.id)?.getTime() ?? 0
+    return aLast - bLast
+  })[0]
 }
 
 function StatCard({
@@ -50,205 +85,301 @@ function StatCard({
 }) {
   return (
     <Card className="p-4">
-      <div className="mb-4 flex items-center justify-between">
-        <span className="text-[11px] font-medium text-[var(--muted)]">{label}</span>
-        <span className="flex h-8 w-8 items-center justify-center rounded-full" style={{ background: `${color}16` }}>
-          <Icon size={14} style={{ color }} />
-        </span>
+      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl" style={{ background: `${color}18`, color }}>
+        <Icon size={18} />
       </div>
-      <p className="text-xl font-semibold tracking-tight text-[var(--foreground)]">{value}</p>
+      <p className="text-2xl font-bold tracking-tight text-[var(--foreground)]">{value}</p>
+      <p className="mt-1 text-xs font-medium text-[var(--muted)]">{label}</p>
     </Card>
   )
 }
 
 export default function Dashboard() {
-  const { profile, sessions } = useProfileStore()
-  const { workouts } = useWorkoutStore()
-  const active = useSessionStore((s) => s.active)
+  const router = useRouter()
+  const { profile, sessions, measurements } = useProfileStore()
+  const { workouts, exercises } = useWorkoutStore()
+  const { active, startSession } = useSessionStore()
 
   const levelInfo = useMemo(
     () => (profile ? getLevelFromXp(profile.xp) : { level: 1, currentXp: 0, xpNeeded: 100 }),
     [profile]
   )
 
+  const now = new Date()
+  const weekStart = startOfWeek(now, { weekStartsOn: 0 })
+  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart])
+
   const weekSessions = useMemo(() => {
-    const now = new Date()
-    const start = startOfWeek(now, { weekStartsOn: 1 })
-    const end = endOfWeek(now, { weekStartsOn: 1 })
-    return sessions.filter((s) => s.finishedAt && isWithinInterval(new Date(s.finishedAt), { start, end }))
+    const start = startOfWeek(new Date(), { weekStartsOn: 1 })
+    const end = endOfWeek(new Date(), { weekStartsOn: 1 })
+    return sessions.filter((session) =>
+      session.finishedAt &&
+      isWithinInterval(new Date(session.finishedAt), { start, end })
+    )
   }, [sessions])
 
-  const weekVolume = weekSessions.reduce((acc, s) => acc + s.totalVolume, 0)
-  const weekTime = weekSessions.reduce((acc, s) => acc + s.duration, 0)
-  const recentSessions = sessions.slice(0, 4)
+  const weekVolume = weekSessions.reduce((total, session) => total + session.totalVolume, 0)
+  const weekTime = weekSessions.reduce((total, session) => total + session.duration, 0)
+  const latestSession = sessions.find((session) => session.finishedAt) ?? null
+  const suggestedWorkout = useMemo(() => findSuggestedWorkout(workouts, sessions), [workouts, sessions])
+  const suggestedLastSession = suggestedWorkout
+    ? sessions.find((session) => session.workoutId === suggestedWorkout.id && session.finishedAt)
+    : null
+  const suggestedExercises = suggestedWorkout?.exerciseIds
+    .map((id) => exercises.find((exercise) => exercise.id === id))
+    .filter(Boolean) ?? []
+  const primaryExercise = suggestedExercises[0]
+  const primaryExerciseLastSet = primaryExercise
+    ? sessions
+        .flatMap((session) => session.exercises.filter((exercise) => exercise.exerciseId === primaryExercise.id))
+        .flatMap((exercise) => exercise.sets)
+        .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())[0]
+    : null
+
+  const latestWorkout = latestSession ? workouts.find((workout) => workout.id === latestSession.workoutId) : null
+  const latestTopExercise = latestSession
+    ? latestSession.exercises
+        .map((sessionExercise) => {
+          const exercise = exercises.find((item) => item.id === sessionExercise.exerciseId)
+          const volume = sessionExercise.sets.reduce((total, set) => total + set.weight * set.reps, 0)
+          return { exercise, volume, sets: sessionExercise.sets.length }
+        })
+        .sort((a, b) => b.volume - a.volume)[0]
+    : null
+
+  const currentWeight = measurements.find((measurement) => measurement.weight != null)?.weight ?? null
+  const levelPct = Math.min((levelInfo.currentXp / Math.max(levelInfo.xpNeeded, 1)) * 100, 100)
+  const weekPct = Math.min((weekSessions.length / WEEK_TARGET) * 100, 100)
 
   const greeting = useMemo(() => {
-    const h = new Date().getHours()
-    if (h < 12) return 'Bom dia'
-    if (h < 18) return 'Boa tarde'
+    const hour = new Date().getHours()
+    if (hour < 12) return 'Bom dia'
+    if (hour < 18) return 'Boa tarde'
     return 'Boa noite'
   }, [])
 
-  const levelPct = Math.min((levelInfo.currentXp / Math.max(levelInfo.xpNeeded, 1)) * 100, 100)
+  async function handleStartSuggested() {
+    if (!suggestedWorkout) return
+    const selectedExercises = suggestedWorkout.exerciseIds
+      .map((id) => exercises.find((exercise) => exercise.id === id))
+      .filter(Boolean) as typeof exercises
+
+    await startSession(suggestedWorkout, selectedExercises)
+    router.push('/workouts/execute')
+  }
 
   return (
-    <div className="apple-page page-content space-y-5">
-      <motion.header custom={0} variants={fadeUp} initial="hidden" animate="show" className="flex items-start justify-between pr-14">
+    <div className="apple-page page-content space-y-5 pb-28">
+      <header className="flex items-start justify-between pr-14">
         <div>
-          <p className="text-sm text-[var(--muted)]">{greeting}</p>
-          <h1 className="mt-1 max-w-[15rem] text-4xl font-semibold leading-tight tracking-normal text-[var(--foreground)]">
-            {profile?.name ?? 'Atleta'}
-          </h1>
+          <p className="text-sm font-semibold text-[var(--muted)]">{greeting},</p>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight text-[var(--foreground)]">{profile?.name ?? 'Atleta'}</h1>
         </div>
-        <button
-          type="button"
-          aria-label="Notificacoes"
-          className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--surface)] shadow-sm"
-          style={{ border: '1px solid var(--border)' }}
-        >
-          <Bell size={18} />
-        </button>
-      </motion.header>
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl" style={{ background: `${CORAL}16`, color: CORAL }}>
+          <Flame size={22} />
+        </div>
+      </header>
 
-      {active && (
-        <motion.div custom={1} variants={fadeUp} initial="hidden" animate="show">
-          <Link href="/workouts/execute">
-            <Card className="p-4" pressable>
-              <div className="flex items-center gap-3">
-                <span className="flex h-11 w-11 items-center justify-center rounded-full" style={{ background: `${active.workoutColor}18` }}>
-                  <Play size={16} style={{ color: active.workoutColor }} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--muted)]">Treino ativo</p>
-                  <p className="truncate text-sm font-semibold text-[var(--foreground)]">{active.workoutName}</p>
-                </div>
-                <ChevronRight size={17} className="text-[var(--muted)]" />
+      <Card glass className="p-5">
+        {active ? (
+          <Link href="/workouts/execute" className="block">
+            <div className="mb-5 flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl text-white" style={{ background: active.workoutColor }}>
+                <Activity size={20} />
               </div>
-            </Card>
-          </Link>
-        </motion.div>
-      )}
-
-      <motion.section custom={2} variants={fadeUp} initial="hidden" animate="show">
-        <Card className="p-5">
-          <div className="flex items-center justify-between gap-5">
-            <div className="min-w-0">
-              <p className="text-sm text-[var(--muted)]">Progresso</p>
-              <h2 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--foreground)]">
-                {levelTitle(levelInfo.level)}
-              </h2>
-              <div className="mt-3 flex flex-wrap gap-3 text-xs text-[var(--muted)]">
-                <span className="inline-flex items-center gap-1">
-                  <Clock size={13} /> {formatDuration(weekTime)}
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <Flame size={13} /> {profile?.streak ?? 0} dias
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <Zap size={13} /> {profile?.xp.toLocaleString() ?? 0} XP
-                </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">Treino em andamento</p>
+                <h2 className="mt-1 truncate text-2xl font-bold text-[var(--foreground)]">{active.workoutName}</h2>
               </div>
             </div>
-
-            <div
-              className="flex h-24 w-24 flex-none items-center justify-center rounded-full"
-              style={{ background: `conic-gradient(${CORAL} ${levelPct}%, var(--surface-3) 0)` }}
-            >
-              <div className="flex h-20 w-20 flex-col items-center justify-center rounded-full bg-[var(--surface)]">
-                <span className="text-xl font-bold text-[var(--foreground)]">{Math.round(levelPct)}%</span>
-                <span className="text-[10px] text-[var(--muted)]">nivel {levelInfo.level}</span>
+            <Button className="w-full">
+              Continuar treino
+              <ArrowRight size={16} />
+            </Button>
+          </Link>
+        ) : suggestedWorkout ? (
+          <>
+            <div className="mb-5 flex items-start gap-4">
+              <div className="flex h-14 w-14 flex-none items-center justify-center rounded-[1.35rem] text-white" style={{ background: suggestedWorkout.color }}>
+                <Dumbbell size={23} />
               </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">Treino sugerido hoje</p>
+                <h2 className="mt-1 truncate text-2xl font-bold text-[var(--foreground)]">{suggestedWorkout.name}</h2>
+                <p className="mt-1 text-sm text-[var(--muted)]">
+                  {daysAgoLabel(suggestedLastSession ? getSessionDate(suggestedLastSession) : null)} - {suggestedWorkout.exerciseIds.length} exercicios
+                </p>
+              </div>
+            </div>
+            <div className="mb-4 rounded-2xl bg-[var(--surface-2)]/70 p-3">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">Proximo foco</p>
+              <p className="mt-1 text-sm font-bold text-[var(--foreground)]">{primaryExercise?.name ?? 'Criar historico'}</p>
+              <p className="mt-0.5 text-xs text-[var(--muted)]">
+                {primaryExerciseLastSet
+                  ? `Ultimo: ${primaryExerciseLastSet.weight}kg x ${primaryExerciseLastSet.reps}`
+                  : primaryExercise
+                    ? primaryExercise.muscleGroup
+                    : 'Adicione exercicios para receber uma sugestao melhor'}
+              </p>
+            </div>
+            <Button className="w-full" onClick={handleStartSuggested}>
+              Iniciar treino
+              <ArrowRight size={16} />
+            </Button>
+          </>
+        ) : (
+          <>
+            <div className="mb-5 flex items-center gap-4">
+              <div className="soft-icon flex h-14 w-14 items-center justify-center rounded-[1.35rem]">
+                <Sparkles size={23} />
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">Comece por aqui</p>
+                <h2 className="mt-1 text-2xl font-bold text-[var(--foreground)]">Monte sua primeira rotina</h2>
+              </div>
+            </div>
+            <Link href="/workouts/new">
+              <Button className="w-full">
+                <Plus size={16} />
+                Criar treino
+              </Button>
+            </Link>
+          </>
+        )}
+      </Card>
+
+      <section>
+        <h2 className="apple-section-title mb-3">Semana atual</h2>
+        <Card className="p-4">
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-bold text-[var(--foreground)]">Meta semanal</p>
+              <p className="text-xs text-[var(--muted)]">{weekSessions.length} de {WEEK_TARGET} treinos</p>
+            </div>
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl" style={{ background: `${CORAL}16`, color: CORAL }}>
+              <Target size={19} />
             </div>
           </div>
-          <div className="mt-5">
-            <Progress value={levelInfo.currentXp} max={levelInfo.xpNeeded} color={CORAL} size="sm" />
+          <Progress value={weekPct} max={100} color={CORAL} />
+          <div className="mt-4 grid grid-cols-7 gap-1.5">
+            {weekDays.map((day, index) => {
+              const trained = weekSessions.some((session) => session.finishedAt && isSameDay(new Date(session.finishedAt), day))
+              const today = isSameDay(day, new Date())
+
+              return (
+                <div key={day.toISOString()} className="text-center">
+                  <p className="mb-1 text-[10px] font-bold text-[var(--muted)]">{WEEK_DAYS[index]}</p>
+                  <div
+                    className="mx-auto flex h-9 w-9 items-center justify-center rounded-2xl text-xs font-bold"
+                    style={{
+                      background: trained ? CORAL : today ? 'var(--surface-3)' : 'var(--surface-2)',
+                      color: trained ? 'white' : 'var(--muted)',
+                      border: today ? '1px solid var(--accent)' : '1px solid transparent',
+                    }}
+                  >
+                    {day.getDate()}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </Card>
-      </motion.section>
+      </section>
 
-      <motion.section custom={3} variants={fadeUp} initial="hidden" animate="show">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="apple-section-title">Minha atividade</h2>
-          <span className="text-xs text-[var(--muted)]">{weekSessions.length} esta semana</span>
-        </div>
+      <section>
+        <h2 className="apple-section-title mb-3">Minha atividade</h2>
         <div className="grid grid-cols-3 gap-3">
           <StatCard icon={Dumbbell} label="Treinos" value={`${weekSessions.length}`} color={CORAL} />
           <StatCard icon={Weight} label="Volume" value={formatVolume(weekVolume)} color={INK} />
           <StatCard icon={Clock} label="Tempo" value={formatDuration(weekTime)} color={AMBER} />
         </div>
-      </motion.section>
+      </section>
 
-      <motion.section custom={4} variants={fadeUp} initial="hidden" animate="show">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="apple-section-title">Resumo</h2>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <StatCard icon={Trophy} label="Treinos" value={`${profile?.totalWorkouts ?? 0}`} color={AMBER} />
-          <StatCard icon={Activity} label="Volume total" value={formatVolume(profile?.totalVolume ?? 0)} color={CORAL} />
-        </div>
-      </motion.section>
-
-      {workouts.length > 0 && !active && (
-        <motion.section custom={5} variants={fadeUp} initial="hidden" animate="show">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="apple-section-title">Recomendacao</h2>
-            <Link href="/workouts" className="text-xs font-semibold text-[var(--accent)]">
-              Ver todos
-            </Link>
-          </div>
-          <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
-            {workouts.slice(0, 5).map((w, index) => (
-              <Link key={w.id} href={`/workouts/detail?id=${w.id}`}>
-                <motion.div
-                  whileTap={{ scale: 0.96 }}
-                  className="flex h-36 w-36 flex-none flex-col justify-between rounded-[28px] p-4 text-white shadow-sm"
-                  style={{ background: index === 0 ? CORAL : w.color }}
-                >
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20">
-                    <Dumbbell size={16} />
-                  </span>
-                  <div>
-                    <p className="text-base font-semibold leading-tight">{w.name}</p>
-                    <p className="mt-1 text-xs text-white/80">{w.exerciseIds.length} exercicios</p>
+      {latestSession && (
+        <section>
+          <h2 className="apple-section-title mb-3">Ultimo desempenho</h2>
+          <Card glass className="p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 flex-none items-center justify-center rounded-2xl text-white" style={{ background: latestWorkout?.color ?? CORAL }}>
+                <Trophy size={18} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-[var(--foreground)]">{latestWorkout?.name ?? 'Treino'}</p>
+                    <p className="mt-0.5 text-xs text-[var(--muted)]">{formatDate(getSessionDate(latestSession))}</p>
                   </div>
-                </motion.div>
-              </Link>
-            ))}
-          </div>
-        </motion.section>
+                  <p className="flex-none text-xs font-bold text-[var(--accent)]">+{latestSession.xpEarned} XP</p>
+                </div>
+                <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-2xl bg-[var(--surface-2)] p-2">
+                    <p className="text-sm font-bold text-[var(--foreground)]">{formatVolume(latestSession.totalVolume)}</p>
+                    <p className="text-[10px] text-[var(--muted)]">volume</p>
+                  </div>
+                  <div className="rounded-2xl bg-[var(--surface-2)] p-2">
+                    <p className="text-sm font-bold text-[var(--foreground)]">{formatDuration(latestSession.duration)}</p>
+                    <p className="text-[10px] text-[var(--muted)]">tempo</p>
+                  </div>
+                  <div className="rounded-2xl bg-[var(--surface-2)] p-2">
+                    <p className="text-sm font-bold text-[var(--foreground)]">
+                      {latestSession.exercises.reduce((total, exercise) => total + exercise.sets.length, 0)}
+                    </p>
+                    <p className="text-[10px] text-[var(--muted)]">series</p>
+                  </div>
+                </div>
+                {latestTopExercise?.exercise && (
+                  <p className="mt-3 text-xs text-[var(--muted)]">
+                    Maior volume: <span className="font-bold text-[var(--foreground)]">{latestTopExercise.exercise.name}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+          </Card>
+        </section>
       )}
 
-      {recentSessions.length > 0 && (
-        <motion.section custom={6} variants={fadeUp} initial="hidden" animate="show">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="apple-section-title">Historico recente</h2>
+      <section>
+        <h2 className="apple-section-title mb-3">Atalhos</h2>
+        <div className="grid grid-cols-3 gap-3">
+          <Link href="/workouts/new">
+            <Card pressable className="p-3 text-center">
+              <Plus size={17} className="mx-auto text-[var(--accent)]" />
+              <p className="mt-2 text-xs font-bold text-[var(--foreground)]">Novo treino</p>
+            </Card>
+          </Link>
+          <Link href="/stats">
+            <Card pressable className="p-3 text-center">
+              <CalendarDays size={17} className="mx-auto text-[var(--accent)]" />
+              <p className="mt-2 text-xs font-bold text-[var(--foreground)]">Stats</p>
+            </Card>
+          </Link>
+          <Link href="/profile">
+            <Card pressable className="p-3 text-center">
+              <Ruler size={17} className="mx-auto text-[var(--accent)]" />
+              <p className="mt-2 text-xs font-bold text-[var(--foreground)]">
+                {currentWeight ? `${currentWeight}kg` : 'Medidas'}
+              </p>
+            </Card>
+          </Link>
+        </div>
+      </section>
+
+      <Card className="p-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Nivel {levelInfo.level}</p>
+            <h2 className="mt-1 text-base font-bold text-[var(--foreground)]">{levelTitle(levelInfo.level)}</h2>
           </div>
-          <div className="space-y-2">
-            {recentSessions.map((s) => {
-              const workout = workouts.find((w) => w.id === s.workoutId)
-              return (
-                <Card key={s.id} className="p-4">
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-full" style={{ background: `${workout?.color ?? CORAL}18` }}>
-                      <Dumbbell size={15} style={{ color: workout?.color ?? CORAL }} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-[var(--foreground)]">{workout?.name ?? 'Treino'}</p>
-                      <p className="text-xs text-[var(--muted)]">
-                        {s.finishedAt ? formatDate(new Date(s.finishedAt)) : 'Em andamento'} - {formatVolume(s.totalVolume)}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs font-semibold text-[var(--accent)]">+{s.xpEarned} XP</p>
-                      <p className="text-[11px] text-[var(--muted)]">{formatDuration(s.duration)}</p>
-                    </div>
-                  </div>
-                </Card>
-              )
-            })}
+          <div className="rounded-full px-3 py-1 text-xs font-bold text-white" style={{ background: CORAL }}>
+            {Math.round(levelPct)}%
           </div>
-        </motion.section>
-      )}
+        </div>
+        <Progress className="mt-4" value={levelInfo.currentXp} max={levelInfo.xpNeeded} color={CORAL} />
+        <div className="mt-3 flex items-center justify-between text-xs text-[var(--muted)]">
+          <span>{levelInfo.currentXp.toLocaleString()} XP</span>
+          <span>{levelInfo.xpNeeded.toLocaleString()} XP</span>
+        </div>
+      </Card>
     </div>
   )
 }

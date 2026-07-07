@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
 import { useProfileStore } from '@/stores/useProfileStore'
 import { ACHIEVEMENTS } from '@/lib/achievements'
 
@@ -21,30 +20,24 @@ export function AchievementToast() {
 
   return (
     <div className="fixed top-4 left-0 right-0 z-50 flex flex-col items-center gap-2 pointer-events-none px-4">
-      <AnimatePresence>
-        {defs.slice(0, 3).map((def) => (
-          <motion.div
-            key={def!.id}
-            initial={{ opacity: 0, y: -40, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            transition={{ type: 'spring', damping: 20 }}
-            className="flex items-center gap-3 rounded-2xl px-4 py-3 border shadow-2xl"
-            style={{
-              background: `${def!.color}15`,
-              borderColor: `${def!.color}30`,
-            }}
-          >
-            <span className="text-2xl">{def!.icon}</span>
-            <div>
-              <p className="text-xs font-semibold" style={{ color: def!.color }}>
-                CONQUISTA DESBLOQUEADA
-              </p>
-              <p className="text-sm font-bold text-white">{def!.title}</p>
-            </div>
-          </motion.div>
-        ))}
-      </AnimatePresence>
+      {defs.slice(0, 3).map((def) => (
+        <div
+          key={def!.id}
+          className="flex items-center gap-3 rounded-2xl px-4 py-3 border shadow-2xl"
+          style={{
+            background: `${def!.color}15`,
+            borderColor: `${def!.color}30`,
+          }}
+        >
+          <span className="text-2xl">{def!.icon}</span>
+          <div>
+            <p className="text-xs font-semibold" style={{ color: def!.color }}>
+              CONQUISTA DESBLOQUEADA
+            </p>
+            <p className="text-sm font-bold text-white">{def!.title}</p>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
 import {
   X, Check, Plus, Timer, ChevronDown, ChevronUp,
   Trophy, Zap, Clock, Minus, Share2, Trash2
@@ -146,19 +145,10 @@ export default function ExecutePage() {
   if (summary) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="text-center space-y-6 max-w-sm w-full"
-        >
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 0.2, type: 'spring', damping: 10 }}
-            className="w-24 h-24 rounded-3xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center mx-auto"
-          >
+        <div className="text-center space-y-6 max-w-sm w-full">
+          <div className="w-24 h-24 rounded-3xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center mx-auto">
             <Trophy size={40} className="text-indigo-400" />
-          </motion.div>
+          </div>
 
           <div>
             <h1 className="text-3xl font-bold text-white mb-1">Treino Concluído!</h1>
@@ -194,20 +184,17 @@ export default function ExecutePage() {
           </div>
 
           {/* Clipboard toast */}
-          <AnimatePresence>
+          <>
             {shareToast && (
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
+              <div
                 className="fixed bottom-8 left-1/2 -translate-x-1/2 rounded-xl px-4 py-2 text-sm font-medium text-white"
                 style={{ background: 'rgba(30,30,35,0.95)', border: '1px solid rgba(255,255,255,0.1)' }}
               >
                 Copiado para a área de transferência!
-              </motion.div>
+              </div>
             )}
-          </AnimatePresence>
-        </motion.div>
+          </>
+        </div>
       </div>
     )
   }
@@ -244,11 +231,9 @@ export default function ExecutePage() {
             <span>{Math.round((totalCompleted / Math.max(totalSets, 1)) * 100)}%</span>
           </div>
           <div className="h-1.5 w-full rounded-full bg-white/5 overflow-hidden">
-            <motion.div
+            <div
               className="h-full rounded-full"
-              style={{ background: active.workoutColor }}
-              animate={{ width: `${(totalCompleted / Math.max(totalSets, 1)) * 100}%` }}
-              transition={{ duration: 0.4 }}
+              style={{ background: active.workoutColor, width: `${(totalCompleted / Math.max(totalSets, 1)) * 100}%`, transition: 'width 220ms ease-out' }}
             />
           </div>
         </div>
@@ -276,6 +261,7 @@ export default function ExecutePage() {
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-white text-sm">{ex.exerciseName}</p>
                   <p className="text-xs text-zinc-500">{ex.muscleGroup}</p>
+                  {ex.notes && <p className="mt-1 line-clamp-1 text-[11px] text-zinc-500">{ex.notes}</p>}
                 </div>
                 {completedSets === ex.sets.length && ex.sets.length > 0 && (
                   <span className="text-emerald-400 text-xs font-semibold flex items-center gap-1">
@@ -296,14 +282,9 @@ export default function ExecutePage() {
                     <span />
                   </div>
 
-                  <AnimatePresence mode="popLayout">
-                    {ex.sets.map((set, idx) => (
-                      <motion.div
+                  {ex.sets.map((set, idx) => (
+                      <div
                         key={set.id}
-                        layout
-                        initial={{ opacity: 0, x: -12 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 12 }}
                         className="grid grid-cols-[18px_minmax(68px,1fr)_minmax(68px,1fr)_32px_32px] gap-1 items-center rounded-xl px-1.5 py-2.5 transition-all"
                         style={set.completed
                           ? { background: 'rgba(0,200,150,0.08)', border: '1px solid rgba(0,200,150,0.18)' }
@@ -344,9 +325,8 @@ export default function ExecutePage() {
                         >
                           <Trash2 size={14} />
                         </button>
-                      </motion.div>
+                      </div>
                     ))}
-                  </AnimatePresence>
 
                   {/* Add set */}
                   <button
@@ -366,6 +346,12 @@ export default function ExecutePage() {
 
                   {/* Rest timer */}
                   <div className="mt-3 pt-3 border-t border-white/5">
+                    {ex.notes && (
+                      <div className="mb-3 rounded-2xl bg-[var(--surface-2)] p-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Notas</p>
+                        <p className="mt-1 text-xs text-white">{ex.notes}</p>
+                      </div>
+                    )}
                     <div className="flex items-center gap-2 mb-2">
                       <Timer size={12} className="text-zinc-600" />
                       <span className="text-xs text-zinc-500">Descanso</span>
