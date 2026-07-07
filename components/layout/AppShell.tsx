@@ -7,6 +7,8 @@ import { useProfileStore } from '@/stores/useProfileStore'
 import { AchievementToast } from '@/components/achievements/AchievementToast'
 import { ServiceWorkerRegister } from '@/components/layout/ServiceWorkerRegister'
 import { ThemeSync } from '@/components/layout/ThemeToggle'
+import { NativeRuntimeHints } from '@/components/layout/NativeRuntimeHints'
+import { VisualEffectsSync } from '@/components/layout/VisualEffectsToggle'
 import { seedDemoData } from '@/lib/seed'
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -23,9 +25,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen">
+      <a href="#app-content" className="skip-link">Pular para o conteudo</a>
       <ServiceWorkerRegister />
       <ThemeSync />
-      <main className="pb-28">
+      <NativeRuntimeHints />
+      <VisualEffectsSync />
+      <main id="app-content" className="pb-28">
         {children}
       </main>
       <BottomNav />

@@ -1,6 +1,5 @@
 'use client'
 
-import { motion } from 'framer-motion'
 import { type HTMLAttributes, type CSSProperties, forwardRef } from 'react'
 import { cn } from '@/lib/cn'
 
@@ -20,35 +19,34 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
           border: '1px solid color-mix(in srgb, var(--border) 84%, white 16%)',
           backdropFilter: 'blur(28px) saturate(170%)',
           WebkitBackdropFilter: 'blur(28px) saturate(170%)',
+          boxShadow: 'var(--shadow-soft), inset 0 1px 0 rgba(255,255,255,0.24), inset 0 -1px 0 rgba(31,32,36,0.035)',
         }
       : {
           background: 'var(--glass-strong)',
           border: '1px solid var(--border)',
           backdropFilter: 'blur(18px) saturate(150%)',
           WebkitBackdropFilter: 'blur(18px) saturate(150%)',
+          boxShadow: 'var(--shadow-soft), inset 0 1px 0 rgba(255,255,255,0.16)',
         }
 
     cardStyle.borderRadius = 'var(--card-radius)'
-    cardStyle.boxShadow = 'var(--shadow-soft)'
 
     if (glow) {
-      cardStyle.boxShadow = `0 18px 50px ${glow}18`
+      cardStyle.boxShadow = `0 18px 50px ${glow}18, inset 0 1px 0 rgba(255,255,255,0.18)`
     }
 
     const combined: CSSProperties = { ...cardStyle, ...style }
 
     if (pressable) {
       return (
-        <motion.div
+        <div
           ref={ref}
-          whileHover={{ scale: 1.01 }}
-          whileTap={{ scale: 0.97 }}
-          className={cn(base, 'cursor-pointer', className)}
+          className={cn(base, 'cursor-pointer transition-transform active:scale-[0.98]', className)}
           style={combined}
-          {...(props as object)}
+          {...props}
         >
           {children}
-        </motion.div>
+        </div>
       )
     }
 

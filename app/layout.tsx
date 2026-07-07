@@ -7,8 +7,18 @@ const geist = Geist({ subsets: ['latin'], variable: '--font-geist-sans' })
 
 export const metadata: Metadata = {
   title: 'WorkoutPro',
-  description: 'Seu parceiro de treino premium',
-  manifest: '/manifest.json',
+  description: 'Planeje treinos, registre series e acompanhe sua evolucao no celular.',
+  manifest: '/manifest.webmanifest',
+  applicationName: 'WorkoutPro',
+  authors: [{ name: 'WorkoutPro' }],
+  keywords: ['treino', 'musculacao', 'fitness', 'progresso', 'academia'],
+  openGraph: {
+    title: 'WorkoutPro',
+    description: 'Planeje treinos, registre series e acompanhe sua evolucao no celular.',
+    type: 'website',
+    locale: 'pt_BR',
+    siteName: 'WorkoutPro',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',

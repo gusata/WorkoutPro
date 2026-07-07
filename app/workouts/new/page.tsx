@@ -2,17 +2,17 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { motion } from 'framer-motion'
-import { ArrowLeft, Plus, Search, Check } from 'lucide-react'
+import { ArrowLeft, Plus, Search, Check, Sparkles } from 'lucide-react'
 import { useWorkoutStore } from '@/stores/useWorkoutStore'
 import { Input, Select, TextArea } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { WORKOUT_COLORS, MUSCLE_GROUPS } from '@/lib/utils'
+import { WORKOUT_TEMPLATES, type WorkoutTemplate } from '@/lib/workoutTemplates'
 
 export default function NewWorkoutPage() {
   const router = useRouter()
-  const { exercises, addWorkout, addExercise } = useWorkoutStore()
+  const { exercises, addWorkout, addExercise, updateExercise } = useWorkoutStore()
 
   const [name, setName] = useState('')
   const [color, setColor] = useState(WORKOUT_COLORS[0])
@@ -56,16 +56,81 @@ export default function NewWorkoutPage() {
     router.push(`/workouts/detail?id=${id}`)
   }
 
+  async function createFromTemplate(template: WorkoutTemplate) {
+    setSaving(true)
+    const exerciseIds: string[] = []
+
+    for (const templateExercise of template.exercises) {
+      const existing = exercises.find((exercise) => exercise.name.toLowerCase() === templateExercise.name.toLowerCase())
+      if (existing) {
+        exerciseIds.push(existing.id)
+        if (!existing.notes && templateExercise.notes) {
+          await updateExercise(existing.id, { notes: templateExercise.notes })
+        }
+      } else {
+        const id = await addExercise({
+          name: templateExercise.name,
+          muscleGroup: templateExercise.muscleGroup,
+          notes: templateExercise.notes,
+        })
+        exerciseIds.push(id)
+      }
+    }
+
+    const workoutId = await addWorkout({
+      name: template.name,
+      color: template.color,
+      icon: 'Dumbbell',
+      exerciseIds,
+    })
+    router.push(`/workouts/detail?id=${workoutId}`)
+  }
+
   return (
-    <div className="px-4 pt-14 pb-4 page-content max-w-lg mx-auto">
+    <div className="px-4 pt-14 pb-28 page-content max-w-lg mx-auto">
       <div className="flex items-center gap-3 mb-6">
         <button onClick={() => router.back()} className="rounded-xl p-2 hover:bg-white/10 text-zinc-400 hover:text-white transition-all">
           <ArrowLeft size={20} />
         </button>
-        <h1 className="text-xl font-bold text-white">Novo Treino</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-white">Novo Treino</h1>
+        </div>
       </div>
 
       <div className="space-y-5">
+        <section>
+          <div className="mb-3 flex items-center gap-2">
+            <Sparkles size={15} className="text-[var(--accent)]" />
+            <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Templates pesquisados</p>
+          </div>
+          <div className="grid gap-2">
+            {WORKOUT_TEMPLATES.map((template) => (
+              <button
+                key={template.id}
+                type="button"
+                onClick={() => createFromTemplate(template)}
+                disabled={saving}
+                className="w-full rounded-2xl border p-3 text-left transition active:scale-[0.99] disabled:opacity-50"
+                style={{
+                  background: 'var(--glass-strong)',
+                  borderColor: 'var(--border)',
+                }}
+              >
+                <div className="flex items-start gap-3">
+                  <span className="mt-1 h-3 w-3 flex-none rounded-full" style={{ background: template.color }} />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-white">{template.name}</p>
+                    <p className="mt-0.5 text-xs text-zinc-500">{template.description}</p>
+                    <p className="mt-2 text-[11px] font-semibold text-[var(--accent)]">
+                      {template.frequency} - {template.exercises.length} exercicios
+                    </p>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+
         {/* Name */}
         <Input
           label="Nome do treino"
@@ -95,8 +160,7 @@ export default function NewWorkoutPage() {
         </div>
 
         {/* Preview */}
-        <motion.div
-          animate={{ borderColor: color }}
+        <div
           className="rounded-2xl p-4 flex items-center gap-3 border"
           style={{ background: `${color}08`, borderColor: `${color}30` }}
         >
@@ -107,7 +171,7 @@ export default function NewWorkoutPage() {
             <p className="font-bold text-white">{name || 'Nome do treino'}</p>
             <p className="text-xs text-zinc-500">{selectedExercises.length} exercício(s)</p>
           </div>
-        </motion.div>
+        </div>
 
         {/* Exercises */}
         <div>
@@ -141,9 +205,8 @@ export default function NewWorkoutPage() {
             {filtered.map((e) => {
               const selected = selectedExercises.includes(e.id)
               return (
-                <motion.button
+                <button
                   key={e.id}
-                  whileTap={{ scale: 0.98 }}
                   onClick={() => toggleExercise(e.id)}
                   className="w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left"
                   style={{
@@ -164,7 +227,7 @@ export default function NewWorkoutPage() {
                     <p className="text-sm font-semibold text-white">{e.name}</p>
                     <p className="text-xs text-zinc-500">{e.muscleGroup}</p>
                   </div>
-                </motion.button>
+                </button>
               )
             })}
           </div>

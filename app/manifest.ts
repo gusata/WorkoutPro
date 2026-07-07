@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'WorkoutPro',
     short_name: 'WorkoutPro',
-    description: 'Seu parceiro de treino premium',
+    description: 'Planeje treinos, registre series e acompanhe sua evolucao no celular.',
     start_url: '/dashboard/',
     display: 'standalone',
     background_color: '#080809',

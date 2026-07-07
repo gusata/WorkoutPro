@@ -1,6 +1,5 @@
 'use client'
 
-import { motion } from 'framer-motion'
 import { cn } from '@/lib/cn'
 
 interface ProgressProps {
@@ -26,12 +25,9 @@ export function Progress({ value, max = 100, color = 'var(--accent)', className,
         </div>
       )}
       <div className={cn('w-full rounded-full overflow-hidden', heights[size])} style={{ background: 'var(--surface-3)' }}>
-        <motion.div
-          initial={{ width: 0 }}
-          animate={{ width: `${pct}%` }}
-          transition={{ duration: 0.6, ease: 'easeOut' }}
+        <div
           className="h-full rounded-full"
-          style={{ background: color }}
+          style={{ background: color, width: `${pct}%`, transition: 'width 320ms ease-out' }}
         />
       </div>
     </div>
@@ -64,7 +60,7 @@ export function CircularProgress({
     <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--surface-3)" strokeWidth={strokeWidth} />
-        <motion.circle
+        <circle
           cx={size / 2}
           cy={size / 2}
           r={r}
@@ -73,9 +69,8 @@ export function CircularProgress({
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           strokeDasharray={circ}
-          initial={{ strokeDashoffset: circ }}
-          animate={{ strokeDashoffset: offset }}
-          transition={{ duration: 0.8, ease: 'easeOut' }}
+          strokeDashoffset={offset}
+          style={{ transition: 'stroke-dashoffset 320ms ease-out' }}
         />
       </svg>
       {children && <div className="absolute">{children}</div>}

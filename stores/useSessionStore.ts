@@ -47,6 +47,7 @@ export const useSessionStore = create<SessionStore>()(
                 exerciseId: e.id,
                 exerciseName: e.name,
                 muscleGroup: e.muscleGroup,
+                notes: e.notes,
                 restSeconds: 90,
                 sets: prevSets.length > 0
                   ? prevSets.map((ps) => ({
