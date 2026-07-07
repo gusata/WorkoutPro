@@ -12,21 +12,21 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'primary', size = 'md', children, ...props }, ref) => {
     const base =
-      'inline-flex items-center justify-center gap-2 font-semibold rounded-xl transition-all active:scale-95 disabled:opacity-40 disabled:pointer-events-none select-none'
+      'inline-flex items-center justify-center gap-2 font-semibold rounded-full transition-all active:scale-95 disabled:opacity-40 disabled:pointer-events-none select-none'
 
     const variants = {
-      primary:   'bg-[#00c896] hover:bg-[#00b386] text-[#080809] font-bold shadow-lg shadow-[#00c896]/20',
-      secondary: 'bg-white/8 hover:bg-white/12 text-white border border-white/8',
-      ghost:     'hover:bg-white/8 text-zinc-400 hover:text-white',
-      danger:    'bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/20',
-      outline:   'border border-white/10 text-white hover:bg-white/5',
+      primary:   'bg-[var(--accent)] hover:brightness-95 text-white font-bold shadow-lg',
+      secondary: 'bg-[var(--surface-2)] hover:brightness-95 text-[var(--foreground)] border border-[var(--border)]',
+      ghost:     'hover:bg-[var(--surface-2)] text-[var(--muted)] hover:text-[var(--foreground)]',
+      danger:    'bg-rose-500/15 hover:bg-rose-500/25 text-rose-500 border border-rose-500/20',
+      outline:   'border border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--surface-2)]',
     }
 
     const sizes = {
-      sm: 'h-8 px-3 text-sm',
-      md: 'h-10 px-4 text-sm',
-      lg: 'h-12 px-6 text-base',
-      icon: 'h-10 w-10 text-sm',
+      sm: 'h-9 px-4 text-sm',
+      md: 'h-11 px-5 text-sm',
+      lg: 'h-12 px-7 text-base',
+      icon: 'h-11 w-11 text-sm',
     }
 
     return (

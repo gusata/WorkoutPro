@@ -46,14 +46,14 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
             exit={{ opacity: 0, y: 20, scale: 0.97 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             className={`fixed bottom-0 left-0 right-0 z-50 mx-auto w-full ${sizes[size]} rounded-t-3xl p-6 pb-safe`}
-            style={{ background: '#17171b', borderTop: '1px solid rgba(255,255,255,0.08)' }}
+            style={{ background: 'var(--surface)', borderTop: '1px solid var(--border)', boxShadow: 'var(--shadow)' }}
           >
             {title && (
               <div className="flex items-center justify-between mb-5">
-                <h2 className="text-lg font-bold text-white">{title}</h2>
+                <h2 className="text-lg font-bold text-[var(--foreground)]">{title}</h2>
                 <button
                   onClick={onClose}
-                  className="rounded-full p-1.5 hover:bg-white/10 text-zinc-400 hover:text-white transition-colors"
+                  className="rounded-full p-1.5 hover:bg-[var(--surface-2)] text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
                 >
                   <X size={18} />
                 </button>

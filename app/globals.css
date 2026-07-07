@@ -1,13 +1,42 @@
 @import "tailwindcss";
 
 :root {
-  --background: #080809;
-  --foreground: #f5f5f5;
-  --surface: #111113;
-  --surface-2: #17171b;
-  --border: rgba(255, 255, 255, 0.06);
-  --accent: #00c896;
-  --accent-indigo: #6366f1;
+  --background: #f5f6f7;
+  --foreground: #1f2024;
+  --muted: #7b7d86;
+  --muted-strong: #555862;
+  --surface: #ffffff;
+  --surface-2: #f0f1f3;
+  --surface-3: #e7e9ec;
+  --glass: rgba(255, 255, 255, 0.68);
+  --glass-strong: rgba(255, 255, 255, 0.82);
+  --border: rgba(31, 32, 36, 0.08);
+  --accent: #e65f43;
+  --accent-2: #f08b73;
+  --accent-indigo: #4b5568;
+  --shadow: 0 20px 60px rgba(26, 31, 44, 0.08);
+  --shadow-soft: 0 10px 30px rgba(26, 31, 44, 0.06);
+  --nav-bg: rgba(255, 255, 255, 0.82);
+  --card-radius: 26px;
+}
+
+html[data-theme='dark'] {
+  --background: #101113;
+  --foreground: #f6f6f4;
+  --muted: #a6a7ad;
+  --muted-strong: #d2d3d6;
+  --surface: #191a1d;
+  --surface-2: #222327;
+  --surface-3: #2b2d33;
+  --glass: rgba(30, 31, 35, 0.48);
+  --glass-strong: rgba(31, 32, 36, 0.62);
+  --border: rgba(255, 255, 255, 0.105);
+  --accent: #ff765c;
+  --accent-2: #ff9a83;
+  --accent-indigo: #aeb7c8;
+  --shadow: 0 20px 70px rgba(0, 0, 0, 0.38);
+  --shadow-soft: 0 10px 38px rgba(0, 0, 0, 0.28);
+  --nav-bg: rgba(27, 28, 32, 0.84);
 }
 
 @theme inline {
@@ -24,16 +53,21 @@
 
 html {
   background: var(--background);
-  color-scheme: dark;
+  color-scheme: light;
   -webkit-text-size-adjust: 100%;
   min-height: 100%;
 }
 
+html[data-theme='dark'] {
+  color-scheme: dark;
+}
+
 body {
-  background-color: #080809;
+  background-color: var(--background);
   background-image:
-    radial-gradient(ellipse 75% 50% at 10% 0%, rgba(0, 200, 150, 0.08) 0%, transparent 100%),
-    radial-gradient(ellipse 55% 45% at 90% 100%, rgba(99, 102, 241, 0.09) 0%, transparent 100%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.62) 0%, transparent 34%),
+    radial-gradient(ellipse 60% 35% at 90% 0%, rgba(230, 95, 67, 0.08) 0%, transparent 80%),
+    radial-gradient(ellipse 42% 28% at 8% 18%, rgba(75, 85, 104, 0.08) 0%, transparent 78%);
   background-attachment: fixed;
   color: var(--foreground);
   font-family: var(--font-geist-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
@@ -45,6 +79,15 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+html[data-theme='dark'] body {
+  background-color: #101113;
+  background-image:
+    radial-gradient(circle at 16% 18%, rgba(255, 255, 255, 0.045) 0%, transparent 24%),
+    radial-gradient(circle at 88% 22%, rgba(255, 118, 92, 0.035) 0%, transparent 26%),
+    radial-gradient(circle at 58% 82%, rgba(166, 167, 173, 0.035) 0%, transparent 30%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.018), transparent 45%);
+}
+
 /* Safe area */
 .pb-safe {
   padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
@@ -54,7 +97,7 @@ body {
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--foreground) 14%, transparent);
   border-radius: 9999px;
 }
 
@@ -65,21 +108,55 @@ input[type='number']::-webkit-outer-spin-button {
 }
 
 ::selection {
-  background: rgba(0, 200, 150, 0.25);
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
   color: white;
 }
 
-/* Glassmorphism */
 .glass {
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: var(--glass);
+  backdrop-filter: blur(26px) saturate(165%);
+  -webkit-backdrop-filter: blur(26px) saturate(165%);
+  border: 1px solid var(--border);
 }
 
-/* Gradient text */
+.glass-panel {
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--glass-strong) 88%, white 8%), var(--glass));
+  border: 1px solid color-mix(in srgb, var(--border) 82%, white 18%);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(28px) saturate(170%);
+  -webkit-backdrop-filter: blur(28px) saturate(170%);
+}
+
+.workout-bubble {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.09)),
+    rgba(255, 255, 255, 0.86);
+  border: 1px solid color-mix(in srgb, var(--foreground) 18%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 18px 54px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(30px) saturate(18%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+}
+
+html[data-theme='dark'] .workout-bubble {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.055)),
+    rgba(31, 32, 36, 0.9);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 18px 54px rgba(0, 0, 0, 0.34);
+}
+
+.soft-icon {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
 .gradient-text {
-  background: linear-gradient(135deg, #f5f5f5 0%, #71717a 100%);
+  background: linear-gradient(135deg, var(--foreground) 0%, var(--muted) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -95,13 +172,68 @@ input[type='number']::-webkit-outer-spin-button {
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Glow utilities */
-.glow-green  { box-shadow: 0 0 48px rgba(0, 200, 150, 0.14); }
-.glow-indigo { box-shadow: 0 0 48px rgba(99, 102, 241, 0.14); }
+.glow-green,
+.glow-indigo {
+  box-shadow: var(--shadow);
+}
 
 input[type='checkbox'] {
-  accent-color: #00c896;
+  accent-color: var(--accent);
   width: 1.25rem;
   height: 1.25rem;
   cursor: pointer;
+}
+
+/* App-wide design token overrides for existing Tailwind-heavy screens. */
+.text-white,
+.text-zinc-100,
+.text-zinc-200,
+.text-zinc-300 {
+  color: var(--foreground) !important;
+}
+
+.text-zinc-400,
+.text-zinc-500,
+.text-zinc-600,
+.text-zinc-700 {
+  color: var(--muted) !important;
+}
+
+.bg-white\/5,
+.bg-white\/8,
+.bg-white\/10,
+.bg-zinc-900 {
+  background-color: color-mix(in srgb, var(--surface-2) 78%, transparent) !important;
+}
+
+.border-white\/5,
+.border-white\/6,
+.border-white\/8,
+.border-white\/10 {
+  border-color: var(--border) !important;
+}
+
+.page-content {
+  color: var(--foreground);
+}
+
+.apple-page {
+  min-height: 100vh;
+  padding: 4.75rem 1rem 1rem;
+  max-width: 30rem;
+  margin: 0 auto;
+}
+
+.apple-section-title {
+  color: var(--foreground);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.theme-toggle {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--foreground);
+  box-shadow: var(--shadow-soft);
 }

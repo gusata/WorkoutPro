@@ -1,129 +1,132 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { Lock } from 'lucide-react'
+import { Award, CheckCircle2, Lock, Sparkles, Trophy } from 'lucide-react'
+import { format } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 import { useProfileStore } from '@/stores/useProfileStore'
 import { ACHIEVEMENTS } from '@/lib/achievements'
 import { Card } from '@/components/ui/Card'
-import { format } from 'date-fns'
-import { ptBR } from 'date-fns/locale'
-
-const GREEN = '#00c896'
+import { Progress } from '@/components/ui/Progress'
 
 const fadeUp = {
   hidden: { opacity: 0, y: 14 },
-  show: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.04, duration: 0.32, ease: 'easeOut' as const },
+  show: (index: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: { delay: index * 0.035, duration: 0.28, ease: 'easeOut' as const },
   }),
 }
 
 export default function AchievementsPage() {
   const { achievements } = useProfileStore()
-  const unlockedIds  = new Set(achievements.map((a) => a.id))
-  const unlockedCount = ACHIEVEMENTS.filter((a) => unlockedIds.has(a.id)).length
-  const pct = (unlockedCount / ACHIEVEMENTS.length) * 100
+  const unlockedIds = new Set(achievements.map((achievement) => achievement.id))
+  const unlocked = ACHIEVEMENTS.filter((achievement) => unlockedIds.has(achievement.id))
+  const locked = ACHIEVEMENTS.filter((achievement) => !unlockedIds.has(achievement.id))
+  const pct = ACHIEVEMENTS.length > 0 ? (unlocked.length / ACHIEVEMENTS.length) * 100 : 0
 
   return (
-    <div className="px-4 pt-14 pb-4 page-content max-w-lg mx-auto">
-      <div className="mb-5">
-        <p className="text-xs text-zinc-500">Suas</p>
-        <h1 className="text-2xl font-bold text-white tracking-tight">Conquistas</h1>
-      </div>
+    <div className="apple-page page-content space-y-5 pb-28">
+      <header>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">Progresso</p>
+        <h1 className="mt-1 text-3xl font-bold tracking-tight text-[var(--foreground)]">Conquistas</h1>
+      </header>
 
-      {/* Progress bar */}
-      <Card glass className="p-4 mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-semibold text-white">
-            {unlockedCount} / {ACHIEVEMENTS.length} desbloqueadas
-          </span>
-          <span className="text-sm font-bold" style={{ color: GREEN }}>
-            {Math.round(pct)}%
-          </span>
+      <Card glass className="p-5">
+        <div className="flex items-center gap-4">
+          <div className="soft-icon flex h-16 w-16 items-center justify-center rounded-[24px]">
+            <Trophy size={28} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-3xl font-bold tracking-tight text-[var(--foreground)]">{Math.round(pct)}%</p>
+            <p className="text-sm text-[var(--muted)]">
+              {unlocked.length} de {ACHIEVEMENTS.length} desbloqueadas
+            </p>
+          </div>
         </div>
-        <div className="h-1.5 w-full rounded-full overflow-hidden"
-          style={{ background: 'rgba(255,255,255,0.06)' }}
-        >
-          <motion.div
-            className="h-full rounded-full"
-            style={{ background: `linear-gradient(90deg, ${GREEN}, #00a87c)` }}
-            initial={{ width: 0 }}
-            animate={{ width: `${pct}%` }}
-            transition={{ duration: 0.9, ease: 'easeOut' as const }}
-          />
-        </div>
+        <Progress value={pct} max={100} className="mt-5" />
       </Card>
 
-      {/* Unlocked */}
-      {unlockedCount > 0 && (
-        <div className="mb-6">
-          <h2 className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mb-3">
-            Desbloqueadas
-          </h2>
-          <div className="space-y-2">
-            {ACHIEVEMENTS.filter((a) => unlockedIds.has(a.id)).map((def, i) => {
-              const record = achievements.find((a) => a.id === def.id)
+      {unlocked.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={16} className="text-[var(--accent)]" />
+            <h2 className="apple-section-title">Desbloqueadas</h2>
+          </div>
+
+          <div className="space-y-3">
+            {unlocked.map((definition, index) => {
+              const record = achievements.find((achievement) => achievement.id === definition.id)
               return (
-                <motion.div key={def.id} custom={i} variants={fadeUp} initial="hidden" animate="show">
-                  <Card className="p-4 flex items-center gap-4" glow={def.color}>
-                    <motion.div
-                      initial={{ scale: 0.5, rotate: -15 }}
-                      animate={{ scale: 1,   rotate: 0   }}
-                      transition={{ delay: i * 0.05, type: 'spring', damping: 14 }}
-                      className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl flex-none"
-                      style={{
-                        background: `${def.color}18`,
-                        border: `1px solid ${def.color}28`,
-                      }}
-                    >
-                      {def.icon}
-                    </motion.div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-white text-sm">{def.title}</p>
-                      <p className="text-xs text-zinc-500 mt-0.5">{def.description}</p>
+                <motion.div key={definition.id} custom={index} variants={fadeUp} initial="hidden" animate="show">
+                  <Card glass className="p-4">
+                    <div className="flex items-center gap-4">
+                      <div
+                        className="flex h-14 w-14 flex-none items-center justify-center rounded-[22px] text-2xl"
+                        style={{ background: `${definition.color}18`, color: definition.color }}
+                      >
+                        {definition.icon}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-[var(--foreground)]">{definition.title}</p>
+                        <p className="mt-0.5 text-xs text-[var(--muted)]">{definition.description}</p>
+                      </div>
+                      {record?.unlockedAt && (
+                        <span className="flex-none rounded-full bg-[var(--surface-2)] px-3 py-1 text-[11px] font-bold text-[var(--muted)]">
+                          {format(new Date(record.unlockedAt), 'd MMM', { locale: ptBR })}
+                        </span>
+                      )}
                     </div>
-                    {record?.unlockedAt && (
-                      <p className="text-[11px] text-zinc-600 flex-none">
-                        {format(new Date(record.unlockedAt), 'd MMM', { locale: ptBR })}
-                      </p>
-                    )}
                   </Card>
                 </motion.div>
               )
             })}
           </div>
-        </div>
+        </section>
       )}
 
-      {/* Locked */}
-      <div>
-        <h2 className="text-[11px] font-semibold text-zinc-700 uppercase tracking-wider mb-3">
-          Bloqueadas
-        </h2>
-        <div className="space-y-2">
-          {ACHIEVEMENTS.filter((a) => !unlockedIds.has(a.id)).map((def, i) => (
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Lock size={16} className="text-[var(--muted)]" />
+          <h2 className="apple-section-title">Bloqueadas</h2>
+        </div>
+
+        <div className="grid gap-3">
+          {locked.map((definition, index) => (
             <motion.div
-              key={def.id}
-              custom={unlockedCount + i}
+              key={definition.id}
+              custom={unlocked.length + index}
               variants={fadeUp}
               initial="hidden"
               animate="show"
             >
-              <Card className="p-4 flex items-center gap-4" style={{ opacity: 0.45 }}>
-                <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-none"
-                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}
-                >
-                  <Lock size={16} className="text-zinc-600" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-bold text-zinc-400 text-sm">{def.title}</p>
-                  <p className="text-xs text-zinc-600 mt-0.5">{def.description}</p>
+              <Card glass className="p-4 opacity-75">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-14 w-14 flex-none items-center justify-center rounded-[22px] bg-[var(--surface-2)] text-[var(--muted)]">
+                    <Lock size={18} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-[var(--foreground)]">{definition.title}</p>
+                    <p className="mt-0.5 text-xs text-[var(--muted)]">{definition.description}</p>
+                  </div>
+                  <Award size={17} className="flex-none text-[var(--muted)]" />
                 </div>
               </Card>
             </motion.div>
           ))}
         </div>
-      </div>
+      </section>
+
+      <Card glass className="p-4">
+        <div className="flex items-center gap-3">
+          <div className="soft-icon flex h-11 w-11 items-center justify-center rounded-2xl">
+            <Sparkles size={18} />
+          </div>
+          <p className="text-sm text-[var(--muted)]">
+            Continue registrando treinos, volume e sequencias para liberar novas metas.
+          </p>
+        </div>
+      </Card>
     </div>
   )
 }

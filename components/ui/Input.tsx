@@ -13,7 +13,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className="flex flex-col gap-1.5">
         {label && (
-          <label htmlFor={id} className="text-xs font-medium text-zinc-400 uppercase tracking-wider">
+          <label htmlFor={id} className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider">
             {label}
           </label>
         )}
@@ -21,8 +21,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           id={id}
           className={cn(
-            'h-11 w-full rounded-xl bg-white/5 border border-white/10 px-4 text-white placeholder:text-zinc-600',
-            'focus:outline-none focus:border-indigo-500 focus:bg-white/8 transition-all',
+            'h-12 w-full rounded-2xl bg-[var(--surface)] border border-[var(--border)] px-4 text-[var(--foreground)] placeholder:text-[var(--muted)] shadow-sm',
+            'focus:outline-none focus:border-[var(--accent)] focus:bg-[var(--surface)] transition-all',
             'text-sm',
             error && 'border-rose-500/50',
             className
@@ -46,7 +46,7 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
     return (
       <div className="flex flex-col gap-1.5">
         {label && (
-          <label htmlFor={id} className="text-xs font-medium text-zinc-400 uppercase tracking-wider">
+          <label htmlFor={id} className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider">
             {label}
           </label>
         )}
@@ -54,8 +54,8 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
           ref={ref}
           id={id}
           className={cn(
-            'w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white placeholder:text-zinc-600',
-            'focus:outline-none focus:border-indigo-500 focus:bg-white/8 transition-all resize-none',
+            'w-full rounded-2xl bg-[var(--surface)] border border-[var(--border)] px-4 py-3 text-[var(--foreground)] placeholder:text-[var(--muted)] shadow-sm',
+            'focus:outline-none focus:border-[var(--accent)] focus:bg-[var(--surface)] transition-all resize-none',
             'text-sm',
             className
           )}
@@ -78,7 +78,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
     return (
       <div className="flex flex-col gap-1.5">
         {label && (
-          <label htmlFor={id} className="text-xs font-medium text-zinc-400 uppercase tracking-wider">
+          <label htmlFor={id} className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider">
             {label}
           </label>
         )}
@@ -86,8 +86,8 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           ref={ref}
           id={id}
           className={cn(
-            'h-11 w-full rounded-xl bg-zinc-900 border border-white/10 px-4 text-white',
-            'focus:outline-none focus:border-indigo-500 transition-all',
+            'h-12 w-full rounded-2xl bg-[var(--surface)] border border-[var(--border)] px-4 text-[var(--foreground)] shadow-sm',
+            'focus:outline-none focus:border-[var(--accent)] transition-all',
             'text-sm appearance-none',
             className
           )}

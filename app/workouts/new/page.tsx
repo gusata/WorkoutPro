@@ -3,18 +3,16 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Plus, Search, Trash2, Check } from 'lucide-react'
+import { ArrowLeft, Plus, Search, Check } from 'lucide-react'
 import { useWorkoutStore } from '@/stores/useWorkoutStore'
 import { Input, Select, TextArea } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
-import { Card } from '@/components/ui/Card'
 import { Modal } from '@/components/ui/Modal'
-import { WORKOUT_COLORS, WORKOUT_ICONS, MUSCLE_GROUPS } from '@/lib/utils'
-import type { Exercise } from '@/types'
+import { WORKOUT_COLORS, MUSCLE_GROUPS } from '@/lib/utils'
 
 export default function NewWorkoutPage() {
   const router = useRouter()
-  const { workouts, exercises, addWorkout, addExercise } = useWorkoutStore()
+  const { exercises, addWorkout, addExercise } = useWorkoutStore()
 
   const [name, setName] = useState('')
   const [color, setColor] = useState(WORKOUT_COLORS[0])

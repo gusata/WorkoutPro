@@ -22,12 +22,12 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: 'cover',
-  themeColor: '#0a0a0a',
+  themeColor: '#f5f6f7',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" className={geist.variable}>
+    <html lang="pt-BR" className={geist.variable} data-theme="light">
       <head>
         <meta name="mobile-web-app-capable" content="yes" />
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />

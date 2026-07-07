@@ -12,7 +12,7 @@ interface ProgressProps {
   label?: string
 }
 
-export function Progress({ value, max = 100, color = '#6366f1', className, size = 'md', label }: ProgressProps) {
+export function Progress({ value, max = 100, color = 'var(--accent)', className, size = 'md', label }: ProgressProps) {
   const pct = Math.min((value / max) * 100, 100)
 
   const heights = { sm: 'h-1', md: 'h-2', lg: 'h-3' }
@@ -25,7 +25,7 @@ export function Progress({ value, max = 100, color = '#6366f1', className, size 
           <span>{Math.round(pct)}%</span>
         </div>
       )}
-      <div className={cn('w-full rounded-full overflow-hidden', heights[size])} style={{ background: 'rgba(255,255,255,0.07)' }}>
+      <div className={cn('w-full rounded-full overflow-hidden', heights[size])} style={{ background: 'var(--surface-3)' }}>
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${pct}%` }}
@@ -52,7 +52,7 @@ export function CircularProgress({
   max = 100,
   size = 80,
   strokeWidth = 6,
-  color = '#6366f1',
+  color = 'var(--accent)',
   children,
 }: CircularProgressProps) {
   const pct = Math.min((value / max) * 100, 100)
@@ -63,7 +63,7 @@ export function CircularProgress({
   return (
     <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth={strokeWidth} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--surface-3)" strokeWidth={strokeWidth} />
         <motion.circle
           cx={size / 2}
           cy={size / 2}

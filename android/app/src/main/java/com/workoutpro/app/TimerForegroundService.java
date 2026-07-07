@@ -6,61 +6,118 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
+import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import androidx.core.app.NotificationCompat;
+import java.util.Locale;
 
 public class TimerForegroundService extends Service {
 
-    public static final String ACTION_START = "com.workoutpro.app.START_TIMER";
-    public static final String ACTION_STOP  = "com.workoutpro.app.STOP_TIMER";
-    public static final String EXTRA_DURATION_MS = "duration_ms";
+    public static final String ACTION_START_WORKOUT = "com.workoutpro.app.START_WORKOUT";
+    public static final String ACTION_STOP_WORKOUT  = "com.workoutpro.app.STOP_WORKOUT";
+    public static final String ACTION_START_TIMER   = "com.workoutpro.app.START_TIMER";
+    public static final String ACTION_CANCEL_REST   = "com.workoutpro.app.CANCEL_REST";
+
+    // Legacy aliases kept so AndroidManifest and any existing references still compile.
+    public static final String ACTION_START = ACTION_START_TIMER;
+    public static final String ACTION_STOP  = ACTION_CANCEL_REST;
+
+    public static final String EXTRA_DURATION_MS      = "duration_ms";
+    public static final String EXTRA_WORKOUT_START_MS = "workout_start_ms";
 
     private static final int NOTIF_TIMER_ID = 2001;
     static final String CHANNEL_TIMER = "workoutpro_timer";
 
     private Handler handler;
-    private long endTimeMs;
+    private long workoutStartMs = 0;
+    private long restEndMs = 0;
+    private boolean isRestActive = false;
+    private NotificationManager notificationManager;
+
+    // Runs every second while the service is alive; keeps both timers current.
+    private final Runnable tickRunnable = new Runnable() {
+        @Override
+        public void run() {
+            try {
+                notificationManager.notify(NOTIF_TIMER_ID, buildNotification());
+            } catch (Exception ignored) {}
+            handler.postDelayed(this, 1000);
+        }
+    };
+
+    // Fires when rest ends naturally — flip back to workout-only display.
+    private final Runnable restDoneRunnable = () -> {
+        isRestActive = false;
+        try { notificationManager.notify(NOTIF_TIMER_ID, buildNotification()); }
+        catch (Exception ignored) {}
+    };
 
     @Override
     public void onCreate() {
         super.onCreate();
         handler = new Handler(Looper.getMainLooper());
-        try { createChannels(); } catch (Exception ignored) {}
+        notificationManager = getSystemService(NotificationManager.class);
+        try { createChannel(); } catch (Exception ignored) {}
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         try {
-            if (intent != null && ACTION_STOP.equals(intent.getAction())) {
+            String action = (intent != null) ? intent.getAction() : ACTION_START_WORKOUT;
+
+            if (ACTION_STOP_WORKOUT.equals(action)) {
                 cancelAndStop();
                 return START_NOT_STICKY;
             }
 
-            long durationMs = (intent != null)
-                ? intent.getLongExtra(EXTRA_DURATION_MS, 90_000L)
-                : 90_000L;
-            endTimeMs = System.currentTimeMillis() + durationMs;
-
-            Notification notification = buildTimerNotification();
-            startForeground(NOTIF_TIMER_ID, notification);
-
-            if (handler != null) {
-                handler.removeCallbacksAndMessages(null);
-                handler.postDelayed(this::onTimerComplete, durationMs);
+            if (ACTION_CANCEL_REST.equals(action)) {
+                // Edge case: service wasn't properly started — just stop.
+                if (workoutStartMs == 0) { stopSelf(); return START_NOT_STICKY; }
+                isRestActive = false;
+                handler.removeCallbacks(restDoneRunnable);
+                notificationManager.notify(NOTIF_TIMER_ID, buildNotification());
+                return START_NOT_STICKY;
             }
+
+            if (ACTION_START_TIMER.equals(action)) {
+                long durationMs = intent.getLongExtra(EXTRA_DURATION_MS, 90_000L);
+                long providedMs  = intent.getLongExtra(EXTRA_WORKOUT_START_MS, 0L);
+                if (providedMs > 0) workoutStartMs = providedMs;
+                if (workoutStartMs == 0) workoutStartMs = System.currentTimeMillis();
+                restEndMs = System.currentTimeMillis() + durationMs;
+                isRestActive = true;
+                handler.removeCallbacks(restDoneRunnable);
+                handler.postDelayed(restDoneRunnable, durationMs);
+                // startForeground is safe to call again if already in foreground — just updates notification.
+                callStartForeground();
+                ensureTickLoop();
+                return START_NOT_STICKY;
+            }
+
+            // ACTION_START_WORKOUT — start the service and show workout timer.
+            long providedMs = (intent != null) ? intent.getLongExtra(EXTRA_WORKOUT_START_MS, 0L) : 0L;
+            if (providedMs > 0) workoutStartMs = providedMs;
+            if (workoutStartMs == 0) workoutStartMs = System.currentTimeMillis();
+            isRestActive = false;
+            callStartForeground();
+            ensureTickLoop();
+
         } catch (Exception e) {
-            // If anything fails (bad icon, channel missing, permission issue, etc.)
-            // stop the service gracefully instead of crashing the app.
             stopSelf();
         }
         return START_NOT_STICKY;
     }
 
+    private void ensureTickLoop() {
+        handler.removeCallbacks(tickRunnable);
+        handler.postDelayed(tickRunnable, 1000);
+    }
+
     private void cancelAndStop() {
-        if (handler != null) handler.removeCallbacksAndMessages(null);
+        handler.removeCallbacksAndMessages(null);
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 stopForeground(STOP_FOREGROUND_REMOVE);
@@ -71,70 +128,65 @@ public class TimerForegroundService extends Service {
         stopSelf();
     }
 
-    private Notification buildTimerNotification() {
-        // Use the app's own launcher icon — guaranteed to exist on every device.
-        int iconRes = R.mipmap.ic_launcher;
+    private Notification buildNotification() {
+        long workoutSec = Math.max(0, (System.currentTimeMillis() - workoutStartMs) / 1000);
 
-        PendingIntent openApp = buildOpenAppIntent(0);
-
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_TIMER)
-            .setSmallIcon(iconRes)
-            .setContentTitle("Descansando...")
-            .setContentText("Próxima série em breve")
-            .setUsesChronometer(true)
-            .setWhen(endTimeMs)
-            .setShowWhen(true)
+        NotificationCompat.Builder b = new NotificationCompat.Builder(this, CHANNEL_TIMER)
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setContentIntent(openApp);
+            .setContentIntent(buildOpenAppIntent());
 
-        // Countdown chronometer: show count down from endTimeMs (API 24+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            builder.setChronometerCountDown(true);
+        if (isRestActive && restEndMs > System.currentTimeMillis()) {
+            long restSec = (restEndMs - System.currentTimeMillis() + 999) / 1000;
+            b.setContentTitle("Descanso: " + fmt(restSec))
+             .setContentText("Treino: " + fmt(workoutSec));
+        } else {
+            b.setContentTitle("Treino em andamento")
+             .setContentText("Duração: " + fmt(workoutSec));
         }
 
-        return builder.build();
+        return b.build();
     }
 
-    private void onTimerComplete() {
-        // The countdown is done — just remove the foreground notification and stop.
-        // The "rest ended" alert is handled by @capacitor/local-notifications
-        // scheduled from JavaScript, so we don't duplicate it here.
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                stopForeground(STOP_FOREGROUND_REMOVE);
-            } else {
-                stopForeground(true);
-            }
-        } catch (Exception ignored) {}
-        stopSelf();
+    // Android 14+ (API 34) requires the foreground service type when the manifest declares one.
+    // Without the third argument, startForeground() throws IllegalArgumentException on API 34+,
+    // which our catch block silently swallows — causing the service to die with no notification.
+    private void callStartForeground() {
+        Notification n = buildNotification();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { // API 29+ supports the typed overload
+            startForeground(NOTIF_TIMER_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH);
+        } else {
+            startForeground(NOTIF_TIMER_ID, n);
+        }
     }
 
-    private PendingIntent buildOpenAppIntent(int requestCode) {
-        Intent openIntent = new Intent(this, MainActivity.class);
-        openIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+    private PendingIntent buildOpenAppIntent() {
+        Intent i = new Intent(this, MainActivity.class);
+        i.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         int flags = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
             ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
             : PendingIntent.FLAG_UPDATE_CURRENT;
-        return PendingIntent.getActivity(this, requestCode, openIntent, flags);
+        return PendingIntent.getActivity(this, 0, i, flags);
     }
 
-    private void createChannels() {
+    private static String fmt(long totalSec) {
+        return String.format(Locale.US, "%02d:%02d", totalSec / 60, totalSec % 60);
+    }
+
+    private void createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationManager nm = getSystemService(NotificationManager.class);
-            NotificationChannel timerCh = new NotificationChannel(
-                CHANNEL_TIMER, "Timer de Descanso", NotificationManager.IMPORTANCE_LOW
+            NotificationChannel ch = new NotificationChannel(
+                CHANNEL_TIMER, "Timer de Treino", NotificationManager.IMPORTANCE_LOW
             );
-            timerCh.setSound(null, null);
-            timerCh.enableVibration(false);
-            nm.createNotificationChannel(timerCh);
+            ch.setSound(null, null);
+            ch.enableVibration(false);
+            notificationManager.createNotificationChannel(ch);
         }
     }
 
     @Override
-    public IBinder onBind(Intent intent) {
-        return null;
-    }
+    public IBinder onBind(Intent intent) { return null; }
 
     @Override
     public void onDestroy() {
