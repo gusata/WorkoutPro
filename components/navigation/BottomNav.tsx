@@ -66,7 +66,7 @@ export function BottomNav() {
                   style={isActive ? { color: 'var(--accent)' } : undefined}
                 />
                 {item.href === '/workouts' && active && (
-                  <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full border border-[#080809] animate-pulse" style={{ background: 'var(--accent)' }} />
+                  <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full border border-[#080809]" style={{ background: 'var(--accent)' }} />
                 )}
               </div>
 

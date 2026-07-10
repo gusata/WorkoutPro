@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { User, Weight, Plus, Trash2, Download, Upload, Edit3, Check, Shield, Palette } from 'lucide-react'
-import { LineChart, Line, XAxis, ResponsiveContainer, Tooltip } from 'recharts'
 import { useProfileStore } from '@/stores/useProfileStore'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -11,6 +10,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Progress } from '@/components/ui/Progress'
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { VisualEffectsToggle } from '@/components/layout/VisualEffectsToggle'
+import { SupabaseAccountCard } from '@/components/auth/SupabaseAccountCard'
 import { getLevelFromXp, levelTitle } from '@/lib/gamification'
 import { exportData, importData } from '@/lib/db'
 import { formatDate } from '@/lib/utils'
@@ -33,6 +33,43 @@ const MEASUREMENT_FIELDS: Array<{ key: keyof BodyMeasurement; label: string; uni
   { key: 'thigh',    label: 'Coxa',        unit: 'cm' },
   { key: 'calf',     label: 'Panturrilha', unit: 'cm' },
 ]
+
+function WeightSparkline({ data }: { data: Array<{ date: string; weight: number }> }) {
+  const width = 260
+  const height = 72
+  const weights = data.map((item) => item.weight)
+  const min = Math.min(...weights)
+  const max = Math.max(...weights)
+  const range = Math.max(max - min, 1)
+  const step = data.length > 1 ? width / (data.length - 1) : width
+  const points = data.map((item, index) => {
+    const x = index * step
+    const y = height - ((item.weight - min) / range) * (height - 12) - 6
+    return { x, y, key: `${item.date}-${index}` }
+  })
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-20 w-full overflow-visible" role="img" aria-label="Evolucao do peso">
+        <polyline
+          points={points.map((point) => `${point.x},${point.y}`).join(' ')}
+          fill="none"
+          stroke={GREEN}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="4"
+        />
+        {points.map((point) => (
+          <circle key={point.key} cx={point.x} cy={point.y} r="4" fill={GREEN} />
+        ))}
+      </svg>
+      <div className="flex justify-between text-[10px] font-medium text-zinc-500">
+        <span>{data[0]?.date}</span>
+        <span>{data[data.length - 1]?.date}</span>
+      </div>
+    </div>
+  )
+}
 
 export default function ProfilePage() {
   const { profile, measurements, updateProfile, addMeasurement, deleteMeasurement, load } = useProfileStore()
@@ -192,31 +229,7 @@ export default function ProfilePage() {
         {weightHistory.length >= 2 && (
           <Card className="p-4 mb-3">
             <p className="text-[11px] text-zinc-500 mb-3 font-medium">Evolução do peso (kg)</p>
-            <ResponsiveContainer width="100%" height={90}>
-              <LineChart data={weightHistory}>
-                <XAxis
-                  dataKey="date"
-                  tick={{ fill: '#52525b', fontSize: 10 }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: '#17171b',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    borderRadius: 10,
-                    fontSize: 12,
-                  }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="weight"
-                  stroke={GREEN}
-                  strokeWidth={2}
-                  dot={{ fill: GREEN, r: 3, strokeWidth: 0 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            <WeightSparkline data={weightHistory} />
           </Card>
         )}
 
@@ -271,6 +284,8 @@ export default function ProfilePage() {
           <VisualEffectsToggle />
         </div>
       </Card>
+
+      <SupabaseAccountCard />
 
       {/* Backup */}
       <Card className="p-4">

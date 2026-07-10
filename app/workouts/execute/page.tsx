@@ -22,7 +22,7 @@ function NumberInput({ value, onChange, min = 0, step = 1, suffix }: {
     <div className="flex min-w-0 items-center justify-center gap-0.5">
       <button
         onClick={() => onChange(Math.max(min, value - step))}
-        className="flex h-6 w-6 flex-none items-center justify-center rounded-lg text-zinc-400 transition-all active:scale-90"
+        className="flex h-6 w-6 flex-none items-center justify-center rounded-lg text-zinc-400 transition-colors"
         style={{ background: 'rgba(255,255,255,0.06)' }}
       >
         <Minus size={11} />
@@ -33,7 +33,7 @@ function NumberInput({ value, onChange, min = 0, step = 1, suffix }: {
       </div>
       <button
         onClick={() => onChange(value + step)}
-        className="flex h-6 w-6 flex-none items-center justify-center rounded-lg text-zinc-400 transition-all active:scale-90"
+        className="flex h-6 w-6 flex-none items-center justify-center rounded-lg text-zinc-400 transition-colors"
         style={{ background: 'rgba(255,255,255,0.06)' }}
       >
         <Plus size={11} />
@@ -217,7 +217,7 @@ export default function ExecutePage() {
           </div>
           <button
             onClick={() => setConfirmDiscard(true)}
-            className="workout-bubble pointer-events-auto flex h-11 w-11 flex-none items-center justify-center rounded-full text-zinc-600 transition-all hover:text-rose-400"
+            className="workout-bubble pointer-events-auto flex h-11 w-11 flex-none items-center justify-center rounded-full text-zinc-600 transition-colors hover:text-rose-400"
             aria-label="Cancelar treino"
           >
             <X size={16} />
@@ -285,7 +285,7 @@ export default function ExecutePage() {
                   {ex.sets.map((set, idx) => (
                       <div
                         key={set.id}
-                        className="grid grid-cols-[18px_minmax(68px,1fr)_minmax(68px,1fr)_32px_32px] gap-1 items-center rounded-xl px-1.5 py-2.5 transition-all"
+                        className="grid grid-cols-[18px_minmax(68px,1fr)_minmax(68px,1fr)_32px_32px] gap-1 items-center rounded-xl px-1.5 py-2.5 transition-colors"
                         style={set.completed
                           ? { background: 'rgba(0,200,150,0.08)', border: '1px solid rgba(0,200,150,0.18)' }
                           : { background: 'rgba(255,255,255,0.03)' }
@@ -306,7 +306,7 @@ export default function ExecutePage() {
 
                         <button
                           onClick={() => handleCompleteSet(ex.exerciseId, set.id)}
-                          className="flex h-8 w-8 flex-none items-center justify-center rounded-xl transition-all active:scale-90"
+                          className="flex h-8 w-8 flex-none items-center justify-center rounded-xl transition-colors"
                           style={set.completed
                             ? { background: '#00c896', color: '#080809' }
                             : { background: 'rgba(255,255,255,0.06)', color: '#71717a' }
@@ -318,7 +318,7 @@ export default function ExecutePage() {
                         <button
                           onClick={() => removeSet(ex.exerciseId, set.id)}
                           disabled={ex.sets.length <= 1}
-                          className="flex h-8 w-8 flex-none items-center justify-center rounded-xl transition-all active:scale-90 disabled:pointer-events-none disabled:opacity-30"
+                          className="flex h-8 w-8 flex-none items-center justify-center rounded-xl transition-colors disabled:pointer-events-none disabled:opacity-30"
                           style={{ background: 'rgba(244,63,94,0.1)', color: '#f43f5e' }}
                           aria-label="Remover serie"
                           title={ex.sets.length <= 1 ? 'Mantenha pelo menos uma serie' : 'Remover serie'}
@@ -338,7 +338,7 @@ export default function ExecutePage() {
                         rpe: null,
                       })
                     }}
-                    className="w-full py-2 rounded-xl border border-dashed border-white/10 text-xs text-zinc-500 hover:text-white hover:border-white/20 transition-all flex items-center justify-center gap-1"
+                    className="w-full py-2 rounded-xl border border-dashed border-white/10 text-xs text-zinc-500 hover:text-white hover:border-white/20 transition-colors flex items-center justify-center gap-1"
                   >
                     <Plus size={12} />
                     Adicionar Série

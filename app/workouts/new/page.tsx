@@ -89,7 +89,7 @@ export default function NewWorkoutPage() {
   return (
     <div className="px-4 pt-14 pb-28 page-content max-w-lg mx-auto">
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => router.back()} className="rounded-xl p-2 hover:bg-white/10 text-zinc-400 hover:text-white transition-all">
+        <button onClick={() => router.back()} className="rounded-xl p-2 hover:bg-white/10 text-zinc-400 hover:text-white transition-colors">
           <ArrowLeft size={20} />
         </button>
         <div>
@@ -110,7 +110,7 @@ export default function NewWorkoutPage() {
                 type="button"
                 onClick={() => createFromTemplate(template)}
                 disabled={saving}
-                className="w-full rounded-2xl border p-3 text-left transition active:scale-[0.99] disabled:opacity-50"
+                className="w-full rounded-2xl border p-3 text-left transition-colors disabled:opacity-50"
                 style={{
                   background: 'var(--glass-strong)',
                   borderColor: 'var(--border)',
@@ -147,7 +147,7 @@ export default function NewWorkoutPage() {
               <button
                 key={c}
                 onClick={() => setColor(c)}
-                className="w-8 h-8 rounded-full transition-transform active:scale-90"
+                className="w-8 h-8 rounded-full transition-colors"
                 style={{
                   background: c,
                   transform: color === c ? 'scale(1.2)' : 'scale(1)',
@@ -208,14 +208,14 @@ export default function NewWorkoutPage() {
                 <button
                   key={e.id}
                   onClick={() => toggleExercise(e.id)}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left"
+                  className="w-full flex items-center gap-3 p-3 rounded-xl transition-colors text-left"
                   style={{
                     background: selected ? `${color}15` : 'rgba(255,255,255,0.03)',
                     border: `1px solid ${selected ? color + '30' : 'rgba(255,255,255,0.06)'}`,
                   }}
                 >
                   <div
-                    className="w-5 h-5 rounded-md flex items-center justify-center flex-none border transition-all"
+                    className="w-5 h-5 rounded-md flex items-center justify-center flex-none border transition-colors"
                     style={{
                       background: selected ? color : 'transparent',
                       borderColor: selected ? color : 'rgba(255,255,255,0.15)',
