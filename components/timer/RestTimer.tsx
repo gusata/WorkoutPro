@@ -67,7 +67,7 @@ export function RestPresetPicker({ currentSeconds, onSelect }: RestPresetPickerP
         <button
           key={s}
           onClick={() => onSelect(s)}
-          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
             currentSeconds === s
               ? 'bg-[var(--accent)] text-white'
               : 'bg-[var(--surface-2)] text-[var(--muted)] hover:text-[var(--foreground)]'

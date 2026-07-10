@@ -22,7 +22,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           id={id}
           className={cn(
             'h-12 w-full rounded-2xl bg-[var(--surface)] border border-[var(--border)] px-4 text-[var(--foreground)] placeholder:text-[var(--muted)] shadow-sm',
-            'focus:outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--accent)_18%,transparent)] focus:bg-[var(--surface)] transition-all',
+            'focus:outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--accent)_18%,transparent)] focus:bg-[var(--surface)] transition-colors',
             'text-sm',
             error && 'border-rose-500/50',
             className
@@ -55,7 +55,7 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
           id={id}
           className={cn(
             'w-full rounded-2xl bg-[var(--surface)] border border-[var(--border)] px-4 py-3 text-[var(--foreground)] placeholder:text-[var(--muted)] shadow-sm',
-            'focus:outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--accent)_18%,transparent)] focus:bg-[var(--surface)] transition-all resize-none',
+            'focus:outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--accent)_18%,transparent)] focus:bg-[var(--surface)] transition-colors resize-none',
             'text-sm',
             className
           )}
@@ -87,7 +87,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           id={id}
           className={cn(
             'h-12 w-full rounded-2xl bg-[var(--surface)] border border-[var(--border)] px-4 text-[var(--foreground)] shadow-sm',
-            'focus:outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--accent)_18%,transparent)] transition-all',
+            'focus:outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--accent)_18%,transparent)] transition-colors',
             'text-sm appearance-none',
             className
           )}

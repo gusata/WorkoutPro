@@ -90,6 +90,23 @@ export interface AchievementRecord {
   unlockedAt: Date
 }
 
+export type SyncEntity =
+  | 'profile'
+  | 'workouts'
+  | 'exercises'
+  | 'sessions'
+  | 'measurements'
+  | 'achievements'
+
+export interface SyncQueueItem {
+  id: string
+  entity: SyncEntity
+  entityId: string
+  operation: 'upsert' | 'delete'
+  createdAt: Date
+  attempts: number
+}
+
 export interface AchievementDef {
   id: string
   title: string

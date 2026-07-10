@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { type CSSProperties, useMemo, useState } from 'react'
 import {
   addMonths,
   eachDayOfInterval,
@@ -16,7 +16,6 @@ import {
   subWeeks,
 } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from 'recharts'
 import { BarChart3, CalendarDays, ChevronLeft, ChevronRight, Clock, Dumbbell, TrendingUp, Weight } from 'lucide-react'
 import { useProfileStore } from '@/stores/useProfileStore'
 import { useWorkoutStore } from '@/stores/useWorkoutStore'
@@ -52,32 +51,56 @@ function MetricCard({
   )
 }
 
-function VolumeTooltip({ active, payload, label }: {
-  active?: boolean
-  payload?: Array<{ value: number }>
-  label?: string
-}) {
-  if (!active || !payload?.length) return null
+function SimpleBarChart({ data }: { data: Array<{ label: string; volume: number }> }) {
+  const max = Math.max(...data.map((item) => item.volume), 1)
 
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--glass-strong)] px-3 py-2 text-xs shadow-lg backdrop-blur-xl">
-      <p className="text-[var(--muted)]">{label}</p>
-      <p className="font-bold text-[var(--foreground)]">{formatVolume(payload[0].value)}</p>
+    <div className="grid h-44 items-end gap-2" style={{ gridTemplateColumns: `repeat(${data.length}, minmax(0, 1fr))` }}>
+      {data.map((item) => (
+        <div key={item.label} className="flex h-full min-w-0 flex-col justify-end gap-2">
+          <div className="flex min-h-0 flex-1 items-end rounded-xl bg-[var(--surface-2)]/55 px-1">
+            <div
+              className="w-full rounded-t-lg bg-[var(--accent)]"
+              style={{ height: `${Math.max((item.volume / max) * 100, item.volume > 0 ? 8 : 0)}%` }}
+              title={`${item.label}: ${formatVolume(item.volume)}`}
+            />
+          </div>
+          <span className="truncate text-center text-[11px] font-medium text-[var(--muted)]">{item.label}</span>
+        </div>
+      ))}
     </div>
   )
 }
 
-function CountTooltip({ active, payload, label }: {
-  active?: boolean
-  payload?: Array<{ value: number }>
-  label?: string
-}) {
-  if (!active || !payload?.length) return null
+function SimpleAreaChart({ data }: { data: Array<{ label: string; treinos: number }> }) {
+  const max = Math.max(...data.map((item) => item.treinos), 1)
+  const width = 280
+  const height = 108
+  const step = data.length > 1 ? width / (data.length - 1) : width
+  const points = data.map((item, index) => {
+    const x = index * step
+    const y = height - (item.treinos / max) * (height - 14) - 7
+    return { x, y, ...item }
+  })
+  const line = points.map((point) => `${point.x},${point.y}`).join(' ')
+  const area = `0,${height} ${line} ${width},${height}`
 
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--glass-strong)] px-3 py-2 text-xs shadow-lg backdrop-blur-xl">
-      <p className="text-[var(--muted)]">{label}</p>
-      <p className="font-bold text-[var(--foreground)]">{payload[0].value} treino(s)</p>
+    <div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-32 w-full overflow-visible" role="img" aria-label="Frequencia de treinos">
+        <polygon points={area} fill="color-mix(in srgb, var(--accent) 16%, transparent)" />
+        <polyline points={line} fill="none" stroke="var(--accent)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+        {points.map((point) => (
+          <circle key={point.label} cx={point.x} cy={point.y} r="4" fill="var(--accent)" />
+        ))}
+      </svg>
+      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${data.length}, minmax(0, 1fr))` } as CSSProperties}>
+        {data.map((item) => (
+          <span key={item.label} className="truncate text-center text-[11px] font-medium text-[var(--muted)]">
+            {item.label}
+          </span>
+        ))}
+      </div>
     </div>
   )
 }
@@ -182,12 +205,6 @@ export default function StatsPage() {
   const totalTime = filteredSessions.reduce((total, session) => total + session.duration, 0)
   const allTimeVolume = sessions.reduce((total, session) => total + session.totalVolume, 0)
 
-  const axisProps = {
-    tick: { fill: 'var(--muted)', fontSize: 11 },
-    axisLine: false as const,
-    tickLine: false as const,
-  }
-
   return (
     <div className="apple-page page-content space-y-5 pb-28">
       <header>
@@ -227,13 +244,7 @@ export default function StatsPage() {
           <TrendingUp size={16} className="text-[var(--accent)]" />
           <h2 className="apple-section-title">Volume</h2>
         </div>
-        <ResponsiveContainer width="100%" height={172}>
-          <BarChart data={volumeChartData} barSize={22}>
-            <XAxis dataKey="label" {...axisProps} />
-            <Tooltip content={<VolumeTooltip />} cursor={{ fill: 'color-mix(in srgb, var(--accent) 8%, transparent)' }} />
-            <Bar dataKey="volume" fill="var(--accent)" radius={[10, 10, 4, 4]} />
-          </BarChart>
-        </ResponsiveContainer>
+        <SimpleBarChart data={volumeChartData} />
       </Card>
 
       <Card glass className="p-4">
@@ -241,27 +252,7 @@ export default function StatsPage() {
           <BarChart3 size={16} className="text-[var(--accent)]" />
           <h2 className="apple-section-title">Frequencia</h2>
         </div>
-        <ResponsiveContainer width="100%" height={135}>
-          <AreaChart data={frequencyData}>
-            <defs>
-              <linearGradient id="freqGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.28} />
-                <stop offset="95%" stopColor="var(--accent)" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <XAxis dataKey="label" {...axisProps} />
-            <CartesianGrid stroke="color-mix(in srgb, var(--foreground) 8%, transparent)" vertical={false} />
-            <Tooltip content={<CountTooltip />} />
-            <Area
-              type="monotone"
-              dataKey="treinos"
-              stroke="var(--accent)"
-              fill="url(#freqGradient)"
-              strokeWidth={3}
-              dot={{ fill: 'var(--accent)', r: 3, strokeWidth: 0 }}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
+        <SimpleAreaChart data={frequencyData} />
       </Card>
 
       <Card glass className="p-4">
@@ -316,7 +307,7 @@ export default function StatsPage() {
                 key={key}
                 type="button"
                 onClick={() => setSelectedDate(day)}
-                className="relative aspect-square rounded-2xl text-sm font-bold transition active:scale-95"
+                className="relative aspect-square rounded-2xl text-sm font-bold transition-colors"
                 style={{
                   color: selected ? 'white' : inMonth ? 'var(--foreground)' : 'var(--muted)',
                   background: selected

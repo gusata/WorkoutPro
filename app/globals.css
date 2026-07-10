@@ -205,8 +205,8 @@ input[type='number']::-webkit-outer-spin-button {
 
 .glass {
   background: var(--glass);
-  backdrop-filter: blur(26px) saturate(165%);
-  -webkit-backdrop-filter: blur(26px) saturate(165%);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
   border: 1px solid var(--border);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.2),
@@ -218,8 +218,8 @@ input[type='number']::-webkit-outer-spin-button {
     linear-gradient(145deg, color-mix(in srgb, var(--glass-strong) 88%, white 8%), var(--glass));
   border: 1px solid color-mix(in srgb, var(--border) 82%, white 18%);
   box-shadow: var(--shadow);
-  backdrop-filter: blur(28px) saturate(170%);
-  -webkit-backdrop-filter: blur(28px) saturate(170%);
+  backdrop-filter: blur(16px) saturate(145%);
+  -webkit-backdrop-filter: blur(16px) saturate(145%);
   box-shadow:
     var(--shadow),
     inset 0 1px 0 rgba(255, 255, 255, 0.24),
@@ -234,8 +234,8 @@ input[type='number']::-webkit-outer-spin-button {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
     0 18px 54px rgba(0, 0, 0, 0.16);
-  backdrop-filter: blur(30px) saturate(180%);
-  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  backdrop-filter: blur(16px) saturate(145%);
+  -webkit-backdrop-filter: blur(16px) saturate(145%);
 }
 
 html[data-theme='dark'] .workout-bubble {
@@ -252,8 +252,8 @@ html[data-theme='dark'] .workout-bubble {
 .native-app .glass-panel,
 .native-app .workout-bubble,
 .native-app .theme-toggle {
-  backdrop-filter: blur(14px) saturate(135%);
-  -webkit-backdrop-filter: blur(14px) saturate(135%);
+  backdrop-filter: blur(8px) saturate(120%);
+  -webkit-backdrop-filter: blur(8px) saturate(120%);
 }
 
 .native-app .glass-panel,
@@ -333,7 +333,7 @@ html[data-theme='dark'] .achievement-row {
 
 /* Page transition */
 .page-content {
-  animation: fadeUp 0.22s ease-out;
+  animation: none;
 }
 
 @keyframes fadeUp {

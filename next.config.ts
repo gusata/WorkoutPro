@@ -12,8 +12,12 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
 
+  turbopack: {
+    root: __dirname,
+  },
+
   experimental: {
-    optimizePackageImports: ["next/font", "lucide-react", "date-fns", "recharts"],
+    optimizePackageImports: ["next/font", "lucide-react", "date-fns"],
   },
 };
 

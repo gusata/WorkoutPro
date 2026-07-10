@@ -6,6 +6,7 @@ import { db } from '@/lib/db'
 import type { ActiveSession, ActiveSet, WorkoutSession, Workout, Exercise } from '@/types'
 import { generateId } from '@/lib/utils'
 import { xpForWorkout } from '@/lib/gamification'
+import { queueSync } from '@/lib/syncQueue'
 
 interface SessionStore {
   active: ActiveSession | null
@@ -105,6 +106,7 @@ export const useSessionStore = create<SessionStore>()(
         }
 
         await db.sessions.add(session)
+        await queueSync('sessions', session.id)
 
         const profile = await db.profile.get('profile')
         if (profile) {
@@ -134,6 +136,7 @@ export const useSessionStore = create<SessionStore>()(
             longestStreak,
             lastWorkoutDate: new Date(),
           })
+          await queueSync('profile', 'profile')
         }
 
         set({ active: null })

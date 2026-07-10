@@ -4,6 +4,7 @@ import { create } from 'zustand'
 import { db } from '@/lib/db'
 import type { Workout, Exercise } from '@/types'
 import { generateId } from '@/lib/utils'
+import { queueSync } from '@/lib/syncQueue'
 
 interface WorkoutStore {
   workouts: Workout[]
@@ -43,12 +44,14 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
       updatedAt: new Date(),
     }
     await db.workouts.add(workout)
+    await queueSync('workouts', workout.id)
     set((s) => ({ workouts: [...s.workouts, workout] }))
     return workout.id
   },
 
   updateWorkout: async (id, updates) => {
     await db.workouts.update(id, { ...updates, updatedAt: new Date() })
+    await queueSync('workouts', id)
     set((s) => ({
       workouts: s.workouts.map((w) =>
         w.id === id ? { ...w, ...updates, updatedAt: new Date() } : w
@@ -57,6 +60,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
   },
 
   deleteWorkout: async (id) => {
+    await queueSync('workouts', id, 'delete')
     await db.workouts.delete(id)
     set((s) => ({ workouts: s.workouts.filter((w) => w.id !== id) }))
   },
@@ -68,18 +72,21 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
       createdAt: new Date(),
     }
     await db.exercises.add(exercise)
+    await queueSync('exercises', exercise.id)
     set((s) => ({ exercises: [...s.exercises, exercise] }))
     return exercise.id
   },
 
   updateExercise: async (id, updates) => {
     await db.exercises.update(id, updates)
+    await queueSync('exercises', id)
     set((s) => ({
       exercises: s.exercises.map((e) => (e.id === id ? { ...e, ...updates } : e)),
     }))
   },
 
   deleteExercise: async (id) => {
+    await queueSync('exercises', id, 'delete')
     await db.exercises.delete(id)
     set((s) => ({ exercises: s.exercises.filter((e) => e.id !== id) }))
   },
@@ -89,6 +96,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     if (!workout) return
     const exerciseIds = [...workout.exerciseIds, exerciseId]
     await db.workouts.update(workoutId, { exerciseIds, updatedAt: new Date() })
+    await queueSync('workouts', workoutId)
     set((s) => ({
       workouts: s.workouts.map((w) =>
         w.id === workoutId ? { ...w, exerciseIds, updatedAt: new Date() } : w
@@ -101,6 +109,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     if (!workout) return
     const exerciseIds = workout.exerciseIds.filter((id) => id !== exerciseId)
     await db.workouts.update(workoutId, { exerciseIds, updatedAt: new Date() })
+    await queueSync('workouts', workoutId)
     set((s) => ({
       workouts: s.workouts.map((w) =>
         w.id === workoutId ? { ...w, exerciseIds, updatedAt: new Date() } : w
@@ -116,5 +125,6 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
       ),
     }))
     await db.workouts.update(workoutId, { exerciseIds: newExerciseIds, updatedAt: new Date() })
+    await queueSync('workouts', workoutId)
   },
 }))

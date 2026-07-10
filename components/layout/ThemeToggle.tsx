@@ -40,7 +40,7 @@ export function ThemeToggle() {
       title={theme === 'dark' ? 'Tema claro' : 'Tema escuro'}
       onClick={toggleTheme}
       className={cn(
-        'theme-toggle flex h-11 w-11 items-center justify-center rounded-full transition-transform active:scale-95'
+        'theme-toggle flex h-11 w-11 items-center justify-center rounded-full transition-colors'
       )}
     >
       <Icon size={18} strokeWidth={2.2} />

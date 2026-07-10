@@ -6,6 +6,7 @@ import type {
   BodyMeasurement,
   UserProfile,
   AchievementRecord,
+  SyncQueueItem,
 } from '@/types'
 
 class WorkoutDatabase extends Dexie {
@@ -15,6 +16,7 @@ class WorkoutDatabase extends Dexie {
   measurements!: EntityTable<BodyMeasurement, 'id'>
   profile!: EntityTable<UserProfile, 'id'>
   achievements!: EntityTable<AchievementRecord, 'id'>
+  syncQueue!: EntityTable<SyncQueueItem, 'id'>
 
   constructor() {
     super('WorkoutProDB')
@@ -25,6 +27,15 @@ class WorkoutDatabase extends Dexie {
       measurements: 'id, date',
       profile: 'id',
       achievements: 'id, unlockedAt',
+    })
+    this.version(2).stores({
+      workouts: 'id, name, createdAt',
+      exercises: 'id, name, muscleGroup, createdAt',
+      sessions: 'id, workoutId, startedAt, finishedAt',
+      measurements: 'id, date',
+      profile: 'id',
+      achievements: 'id, unlockedAt',
+      syncQueue: 'id, entity, entityId, [entity+entityId], operation, createdAt',
     })
   }
 }
@@ -69,18 +80,31 @@ export async function exportData() {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function importData(data: any) {
-  await db.transaction('rw', [db.workouts, db.exercises, db.sessions, db.measurements, db.profile, db.achievements], async () => {
+  await db.transaction('rw', [db.workouts, db.exercises, db.sessions, db.measurements, db.profile, db.achievements, db.syncQueue], async () => {
     await db.workouts.clear()
     await db.exercises.clear()
     await db.sessions.clear()
     await db.measurements.clear()
     await db.profile.clear()
     await db.achievements.clear()
+    await db.syncQueue.clear()
     if (data.workouts?.length) await db.workouts.bulkAdd(data.workouts)
     if (data.exercises?.length) await db.exercises.bulkAdd(data.exercises)
     if (data.sessions?.length) await db.sessions.bulkAdd(data.sessions)
     if (data.measurements?.length) await db.measurements.bulkAdd(data.measurements)
     if (data.profile?.length) await db.profile.bulkAdd(data.profile)
     if (data.achievements?.length) await db.achievements.bulkAdd(data.achievements)
+  })
+}
+
+export async function clearLocalData() {
+  await db.transaction('rw', [db.workouts, db.exercises, db.sessions, db.measurements, db.profile, db.achievements, db.syncQueue], async () => {
+    await db.workouts.clear()
+    await db.exercises.clear()
+    await db.sessions.clear()
+    await db.measurements.clear()
+    await db.profile.clear()
+    await db.achievements.clear()
+    await db.syncQueue.clear()
   })
 }

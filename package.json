@@ -7,21 +7,24 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "android": "next build && npx cap sync android && npx cap run android"
+    "android": "next build && npx cap sync android && npx cap run android",
+    "a": "powershell -NoProfile -ExecutionPolicy Bypass-Command \"$env:JAVA_HOME='C:\\Program Files\\Android\\Android Studio\\jbr'; $env:Path += ';' + $env:JAVA_HOME + '\\bin'; $env:ANDROID_HOME='C:\\Users\\gustavo.sanches\\AppData\\Local\\Android\\Sdk';"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.0",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/browser": "^8.0.3",
     "@capacitor/core": "^8.4.0",
     "@capacitor/ios": "^8.4.0",
     "@capacitor/local-notifications": "^8.2.0",
     "@capacitor/splash-screen": "^8.0.1",
+    "@supabase/supabase-js": "^2.110.2",
     "date-fns": "^4.4.0",
     "dexie": "^4.4.3",
     "lucide-react": "^1.17.0",
     "next": "16.2.9",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "recharts": "^3.8.1",
     "zustand": "^5.0.14"
   },
   "devDependencies": {

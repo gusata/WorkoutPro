@@ -94,7 +94,7 @@ function ExerciseRow({ ex, workoutColor, sessions, isOpen, canMoveUp, canMoveDow
               </Link>
               <button
                 onClick={(e) => { e.stopPropagation(); onRemove() }}
-                className="p-1.5 rounded-lg text-zinc-700 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
+                className="p-1.5 rounded-lg text-zinc-700 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
               >
                 <Trash2 size={13} />
               </button>

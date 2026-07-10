@@ -27,7 +27,7 @@ export function Progress({ value, max = 100, color = 'var(--accent)', className,
       <div className={cn('w-full rounded-full overflow-hidden', heights[size])} style={{ background: 'var(--surface-3)' }}>
         <div
           className="h-full rounded-full"
-          style={{ background: color, width: `${pct}%`, transition: 'width 320ms ease-out' }}
+          style={{ background: color, width: `${pct}%`, transition: 'width 160ms ease-out' }}
         />
       </div>
     </div>
@@ -70,7 +70,7 @@ export function CircularProgress({
           strokeLinecap="round"
           strokeDasharray={circ}
           strokeDashoffset={offset}
-          style={{ transition: 'stroke-dashoffset 320ms ease-out' }}
+          style={{ transition: 'stroke-dashoffset 160ms ease-out' }}
         />
       </svg>
       {children && <div className="absolute">{children}</div>}
