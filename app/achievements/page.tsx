@@ -1,121 +1,80 @@
 'use client'
 
-import { useMemo } from 'react'
-import { Award, CheckCircle2, Lock, Sparkles, Trophy } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { useProfileStore } from '@/stores/useProfileStore'
 import { ACHIEVEMENTS } from '@/lib/achievements'
-import { Card } from '@/components/ui/Card'
-import { Progress } from '@/components/ui/Progress'
+import { AchievementMedal } from '@/components/achievements/AchievementIcon'
+import { Modal } from '@/components/ui/Modal'
+import { Hero, LocalNav } from '@/components/layout/PageHeader'
+import type { AchievementDef } from '@/types'
 
 export default function AchievementsPage() {
-  const { achievements } = useProfileStore()
-  const achievementRecords = useMemo(
-    () => new Map(achievements.map((achievement) => [achievement.id, achievement])),
-    [achievements]
-  )
-  const unlockedIds = useMemo(() => new Set(achievementRecords.keys()), [achievementRecords])
-  const unlocked = useMemo(
-    () => ACHIEVEMENTS.filter((achievement) => unlockedIds.has(achievement.id)),
-    [unlockedIds]
-  )
-  const locked = useMemo(
-    () => ACHIEVEMENTS.filter((achievement) => !unlockedIds.has(achievement.id)),
-    [unlockedIds]
-  )
-  const pct = ACHIEVEMENTS.length > 0 ? (unlocked.length / ACHIEVEMENTS.length) * 100 : 0
+  const achievements = useProfileStore((state) => state.achievements)
+  const [selected, setSelected] = useState<AchievementDef | null>(null)
+  const records = useMemo(() => new Map(achievements.map((achievement) => [achievement.id, achievement])), [achievements])
+  const unlocked = ACHIEVEMENTS.filter((achievement) => records.has(achievement.id))
+  const locked = ACHIEVEMENTS.filter((achievement) => !records.has(achievement.id))
+  const pct = ACHIEVEMENTS.length > 0 ? Math.round((unlocked.length / ACHIEVEMENTS.length) * 100) : 0
+  const selectedRecord = selected ? records.get(selected.id) : undefined
 
   return (
-    <div className="apple-page page-content space-y-5 pb-28">
-      <header>
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">Progresso</p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight text-[var(--foreground)]">Conquistas</h1>
-      </header>
-
-      <Card glass className="p-5">
-        <div className="flex items-center gap-4">
-          <div className="soft-icon flex h-16 w-16 items-center justify-center rounded-[24px]">
-            <Trophy size={28} />
+    <div className="apple-page page-content">
+      <LocalNav title="Prêmios" back="/profile" />
+      <Hero eyebrow="Conquistas" title="Prêmios." lede={`${unlocked.length} de ${ACHIEVEMENTS.length} conquistados.`}>
+        <div className="mt-5 max-w-xs">
+          <div className="progress-track" role="progressbar" aria-label="Prêmios conquistados" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
+            <div className="progress-fill" style={{ width: `${pct}%` }} />
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-3xl font-bold tracking-tight text-[var(--foreground)]">{Math.round(pct)}%</p>
-            <p className="text-sm text-[var(--muted)]">
-              {unlocked.length} de {ACHIEVEMENTS.length} desbloqueadas
+        </div>
+      </Hero>
+
+      {unlocked.length > 0 && <AwardGrid title="Conquistados." items={unlocked} unlocked onSelect={setSelected} dates={records} />}
+      <AwardGrid title={unlocked.length > 0 ? 'Próximos.' : 'Todos os prêmios.'} items={locked} unlocked={false} onSelect={setSelected} dates={records} />
+
+      <Modal open={!!selected} onClose={() => setSelected(null)} ariaLabel={selected?.title}>
+        {selected && (
+          <div className="pb-6 text-center">
+            <AchievementMedal icon={selected.icon} color={selected.color} unlocked={Boolean(selectedRecord)} size={140} className="mx-auto" />
+            <h2 className="display mt-7">{selected.title}</h2>
+            <p className="lede mx-auto mt-2 max-w-xs">{selected.description}</p>
+            <p className="eyebrow mt-5">
+              {selectedRecord
+                ? `Conquistado em ${new Date(selectedRecord.unlockedAt).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}`
+                : 'Ainda não conquistado'}
             </p>
           </div>
-        </div>
-        <Progress value={pct} max={100} color="var(--accent)" className="mt-5" />
-      </Card>
-
-      {unlocked.length > 0 && (
-        <section className="space-y-3">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 size={16} className="text-[var(--accent)]" />
-            <h2 className="apple-section-title">Desbloqueadas</h2>
-          </div>
-
-          <div className="space-y-3">
-            {unlocked.map((definition) => {
-              const record = achievementRecords.get(definition.id)
-              return (
-                <div key={definition.id} className="achievement-row p-4">
-                  <div className="flex items-center gap-4">
-                    <div
-                      className="flex h-14 w-14 flex-none items-center justify-center rounded-[22px] text-2xl"
-                      style={{ background: `${definition.color}18`, color: definition.color }}
-                    >
-                      {definition.icon}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-bold text-[var(--foreground)]">{definition.title}</p>
-                      <p className="mt-0.5 text-xs text-[var(--muted)]">{definition.description}</p>
-                    </div>
-                    {record?.unlockedAt && (
-                      <span className="flex-none rounded-full bg-[var(--surface-2)] px-3 py-1 text-[11px] font-bold text-[var(--muted)]">
-                        {new Date(record.unlockedAt).toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </section>
-      )}
-
-      <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Lock size={16} className="text-[var(--muted)]" />
-          <h2 className="apple-section-title">Bloqueadas</h2>
-        </div>
-
-        <div className="grid gap-3">
-          {locked.map((definition) => (
-            <div key={definition.id} className="achievement-row p-4 opacity-75">
-              <div className="flex items-center gap-4">
-                <div className="flex h-14 w-14 flex-none items-center justify-center rounded-[22px] bg-[var(--surface-2)] text-[var(--muted)]">
-                  <Lock size={18} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold text-[var(--foreground)]">{definition.title}</p>
-                  <p className="mt-0.5 text-xs text-[var(--muted)]">{definition.description}</p>
-                </div>
-                <Award size={17} className="flex-none text-[var(--muted)]" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <Card glass className="p-4">
-        <div className="flex items-center gap-3">
-          <div className="soft-icon flex h-11 w-11 items-center justify-center rounded-2xl">
-            <Sparkles size={18} />
-          </div>
-          <p className="text-sm text-[var(--muted)]">
-            Continue registrando treinos, volume e sequencias para liberar novas metas.
-          </p>
-        </div>
-      </Card>
+        )}
+      </Modal>
     </div>
+  )
+}
+
+function AwardGrid({ title, items, unlocked, onSelect, dates }: {
+  title: string
+  items: AchievementDef[]
+  unlocked: boolean
+  onSelect: (item: AchievementDef) => void
+  dates: Map<string, { unlockedAt: Date }>
+}) {
+  return (
+    <section aria-label={title} className="stack-section">
+      <h2 className="section-title mb-5 px-1">{title}</h2>
+      <ul className="tile grid grid-cols-3 gap-x-3 gap-y-7">
+        {items.map((item) => {
+          const record = dates.get(item.id)
+          return (
+            <li key={item.id}>
+              <button type="button" onClick={() => onSelect(item)} className="pressable flex w-full flex-col items-center text-center">
+                <AchievementMedal icon={item.icon} color={item.color} unlocked={unlocked} size={76} />
+                <span className="footnote mt-2.5 line-clamp-2 font-semibold">{item.title}</span>
+                <span className="caption mt-0.5 line-clamp-2 text-[var(--muted)]">
+                  {record ? new Date(record.unlockedAt).toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }) : item.description}
+                </span>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
   )
 }

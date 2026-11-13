@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">workoutpro</string>
-    <string name="title_activity_main">workoutpro</string>
+    <string name="app_name">WorkoutPro</string>
+    <string name="title_activity_main">WorkoutPro</string>
     <string name="package_name">com.workoutpro.app</string>
     <string name="custom_url_scheme">com.workoutpro.app</string>
 </resources>

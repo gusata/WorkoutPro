@@ -1,6 +1,26 @@
 import { Capacitor } from '@capacitor/core'
 
 const REST_NOTIF_ID = 1001
+export const ALERT_CHANNEL_ID = 'workoutpro_alert'
+
+let channelReady: Promise<void> | null = null
+
+/** Android 8+ silently drops notifications posted to a channel that was never created. */
+export function ensureAlertChannel(): Promise<void> {
+  if (typeof window === 'undefined' || !Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') {
+    return Promise.resolve()
+  }
+  channelReady ??= import('@capacitor/local-notifications')
+    .then(({ LocalNotifications }) => LocalNotifications.createChannel({
+      id: ALERT_CHANNEL_ID,
+      name: 'Avisos de treino',
+      description: 'Fim do descanso e lembretes de treino',
+      importance: 4,
+      vibration: true,
+    }))
+    .catch(() => { channelReady = null })
+  return channelReady
+}
 
 export async function requestNotificationPermission(): Promise<boolean> {
   if (typeof window === 'undefined') return false
@@ -27,15 +47,16 @@ export async function scheduleRestEndNotification(seconds: number): Promise<void
 
   try {
     const { LocalNotifications } = await import('@capacitor/local-notifications')
+    await ensureAlertChannel()
     await LocalNotifications.cancel({ notifications: [{ id: REST_NOTIF_ID }] })
     await LocalNotifications.schedule({
       notifications: [
         {
           id: REST_NOTIF_ID,
-          title: 'Descanso terminado! 💪',
+          title: 'Descanso terminado',
           body: 'Hora da próxima série',
           schedule: { at: new Date(Date.now() + seconds * 1000), allowWhileIdle: true },
-          channelId: 'workoutpro_alert',
+          channelId: ALERT_CHANNEL_ID,
         },
       ],
     })

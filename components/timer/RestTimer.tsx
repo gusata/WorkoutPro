@@ -1,56 +1,69 @@
 'use client'
 
 import { useEffect } from 'react'
-import { X, SkipForward } from 'lucide-react'
+import { SkipForward } from 'lucide-react'
+import { useShallow } from 'zustand/react/shallow'
 import { useTimerStore } from '@/stores/useTimerStore'
 import { CircularProgress } from '@/components/ui/Progress'
-import { formatDuration } from '@/lib/utils'
-import { REST_PRESETS } from '@/lib/utils'
+import { formatDuration, REST_PRESETS } from '@/lib/utils'
+import { cn } from '@/lib/cn'
 
 export function RestTimerOverlay() {
-  const { restSeconds, restTotal, restRunning, stopRest, startRest, tickRest } = useTimerStore()
+  const { restSeconds, restTotal, restRunning } = useTimerStore(
+    useShallow((state) => ({ restSeconds: state.restSeconds, restTotal: state.restTotal, restRunning: state.restRunning }))
+  )
+  const stopRest = useTimerStore((state) => state.stopRest)
+  const extendRest = useTimerStore((state) => state.extendRest)
+  const tickRest = useTimerStore((state) => state.tickRest)
 
   useEffect(() => {
     if (!restRunning) return
-    const interval = setInterval(tickRest, 1000)
-    return () => clearInterval(interval)
+    // 500ms keeps the countdown from visibly skipping a second when the interval drifts.
+    const interval = setInterval(tickRest, 500)
+    const onVisible = () => { if (document.visibilityState === 'visible') tickRest() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [restRunning, tickRest])
 
   if (!restRunning) return null
 
   return (
-    <div className="fixed bottom-44 left-0 right-0 z-40 flex justify-center px-4">
-      <div className="glass-panel flex w-full max-w-sm items-center gap-4 rounded-[26px] px-5 py-4">
-        <CircularProgress
-          value={restTotal - restSeconds}
-          max={restTotal}
-          size={56}
-          strokeWidth={4}
-          color="var(--accent)"
-        >
-          <span className="text-xs font-bold text-[var(--foreground)]">{restSeconds}</span>
+    <div
+      className="fixed left-0 right-0 z-40 flex justify-center px-3"
+      style={{ bottom: 'calc(max(0.75rem, env(safe-area-inset-bottom)) + 5.5rem)' }}
+    >
+      <section aria-label="Descanso" className="toast-enter flex w-full max-w-md items-center gap-3 rounded-[30px] bg-[#1d1d1f] p-2.5 pl-3 text-[#f5f5f7] shadow-[var(--shadow-float)]">
+        <CircularProgress value={restTotal - restSeconds} max={restTotal} size={50} strokeWidth={5} color="#2997ff">
+          <span className="numeric text-[13px] font-semibold text-[#f5f5f7]" aria-hidden>{restSeconds}</span>
         </CircularProgress>
 
-        <div className="flex-1">
-          <p className="text-xs text-[var(--muted)] font-medium">DESCANSO</p>
-          <p className="text-xl font-bold text-[var(--foreground)]">{formatDuration(restSeconds)}</p>
+        <div className="min-w-0 flex-1">
+          <p className="caption font-semibold text-[#a1a1a6]">Descanso</p>
+          <p className="stat whitespace-nowrap text-[24px] leading-7 text-[#f5f5f7]" role="timer" aria-live="off" aria-label={formatDuration(restSeconds)}>{Math.floor(restSeconds / 60)}:{String(restSeconds % 60).padStart(2, '0')}</p>
         </div>
 
         <div className="flex gap-2">
           <button
-            onClick={() => startRest(restTotal)}
-            className="rounded-xl p-2 bg-[var(--surface-2)] text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
+            type="button"
+            onClick={() => extendRest(15)}
+            className="numeric flex h-11 min-w-12 items-center justify-center rounded-full bg-white/12 px-3.5 text-[15px] font-medium text-[#f5f5f7] transition-transform active:scale-95"
+            aria-label="Adicionar 15 segundos"
           >
-            <SkipForward size={16} />
+            +15s
           </button>
           <button
+            type="button"
             onClick={stopRest}
-            className="rounded-xl p-2 bg-rose-500/15 hover:bg-rose-500/25 text-rose-500 transition-colors"
+            className="flex h-11 items-center justify-center gap-1.5 rounded-full bg-[var(--accent-fill)] px-4 text-[15px] font-medium text-[var(--on-accent)] transition-transform active:scale-95"
           >
-            <X size={16} />
+            <SkipForward size={16} aria-hidden />
+            Pular
           </button>
         </div>
-      </div>
+      </section>
     </div>
   )
 }
@@ -62,20 +75,24 @@ interface RestPresetPickerProps {
 
 export function RestPresetPicker({ currentSeconds, onSelect }: RestPresetPickerProps) {
   return (
-    <div className="flex gap-2 flex-wrap">
-      {REST_PRESETS.map((s) => (
-        <button
-          key={s}
-          onClick={() => onSelect(s)}
-          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-            currentSeconds === s
-              ? 'bg-[var(--accent)] text-white'
-              : 'bg-[var(--surface-2)] text-[var(--muted)] hover:text-[var(--foreground)]'
-          }`}
-        >
-          {s}s
-        </button>
-      ))}
+    <div className="flex flex-wrap gap-2" role="group" aria-label="Tempo de descanso">
+      {REST_PRESETS.map((seconds) => {
+        const selected = currentSeconds === seconds
+        return (
+          <button
+            key={seconds}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onSelect(seconds)}
+            className={cn(
+              'numeric h-11 min-w-14 rounded-full px-3.5 text-[15px] font-medium transition-colors',
+              selected ? 'bg-[var(--foreground)] text-[var(--background-elevated)]' : 'bg-[var(--fill)] text-[var(--foreground)]'
+            )}
+          >
+            {seconds}s
+          </button>
+        )
+      })}
     </div>
   )
 }

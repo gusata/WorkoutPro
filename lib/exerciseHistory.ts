@@ -106,3 +106,12 @@ export function getBestExerciseRecord(
     }))
     .sort((a, b) => b.records.bestEstimatedOneRm - a.records.bestEstimatedOneRm)[0] ?? null
 }
+
+/** Sets from the most recent finished session that included the exercise (for pre-filling). */
+export function lastSetsForExercise(exerciseId: string, sessions: WorkoutSession[]) {
+  const latest = sessions
+    .filter((session) => session.finishedAt && session.exercises.some((item) => item.exerciseId === exerciseId && item.sets.length > 0))
+    .sort((a, b) => new Date(b.finishedAt!).getTime() - new Date(a.finishedAt!).getTime())[0]
+  const sets = latest?.exercises.find((item) => item.exerciseId === exerciseId)?.sets ?? []
+  return sets.map((set) => ({ weight: set.weight, reps: set.reps, rpe: set.rpe, rir: set.rir, setType: set.setType }))
+}

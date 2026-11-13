@@ -1,280 +1,131 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Plus, Search, Check, Sparkles } from 'lucide-react'
+import { Check, ChevronRight, Plus, Search, Sparkles } from 'lucide-react'
 import { useWorkoutStore } from '@/stores/useWorkoutStore'
-import { Input, Select, TextArea } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
+import { Input, Select, TextArea } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
-import { WORKOUT_COLORS, MUSCLE_GROUPS } from '@/lib/utils'
+import { Hero, LocalNav } from '@/components/layout/PageHeader'
+import { MUSCLE_GROUPS, readableOn, WORKOUT_COLORS } from '@/lib/utils'
+import { exerciseMatches } from '@/lib/training'
 import { WORKOUT_TEMPLATES, type WorkoutTemplate } from '@/lib/workoutTemplates'
+import type { MuscleGroup, WorkoutExerciseConfig } from '@/types'
+
+const WEEKDAYS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
+const WEEKDAY_NAMES = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado']
+const COLOR_NAMES: Record<string, string> = {
+  '#6366f1': 'índigo', '#f43f5e': 'rosa', '#f97316': 'laranja', '#eab308': 'amarelo', '#22c55e': 'verde',
+  '#14b8a6': 'verde-azulado', '#06b6d4': 'ciano', '#8b5cf6': 'violeta', '#ec4899': 'pink', '#84cc16': 'lima',
+}
 
 export default function NewWorkoutPage() {
   const router = useRouter()
-  const { exercises, addWorkout, addExercise, updateExercise } = useWorkoutStore()
-
+  const exercises = useWorkoutStore((state) => state.exercises)
+  const addWorkout = useWorkoutStore((state) => state.addWorkout)
+  const addExercise = useWorkoutStore((state) => state.addExercise)
+  const updateExercise = useWorkoutStore((state) => state.updateExercise)
   const [name, setName] = useState('')
   const [color, setColor] = useState(WORKOUT_COLORS[0])
-  const [selectedExercises, setSelectedExercises] = useState<string[]>([])
+  const [selected, setSelected] = useState<string[]>([])
+  const [configs, setConfigs] = useState<Record<string, WorkoutExerciseConfig>>({})
+  const [weekdays, setWeekdays] = useState<number[]>([])
+  const [query, setQuery] = useState('')
+  const [muscle, setMuscle] = useState('Todos')
   const [saving, setSaving] = useState(false)
-
-  // New exercise modal
-  const [showExModal, setShowExModal] = useState(false)
+  const [showTemplates, setShowTemplates] = useState(false)
+  const [showCreate, setShowCreate] = useState(false)
   const [exName, setExName] = useState('')
-  const [exMuscle, setExMuscle] = useState(MUSCLE_GROUPS[0])
+  const [exMuscle, setExMuscle] = useState<MuscleGroup>(MUSCLE_GROUPS[0])
   const [exNotes, setExNotes] = useState('')
-  const [exSearch, setExSearch] = useState('')
 
-  const filtered = exercises.filter((e) =>
-    e.name.toLowerCase().includes(exSearch.toLowerCase())
-  )
+  const filtered = useMemo(() => exercises.filter((exercise) =>
+    (muscle === 'Todos' || exercise.muscleGroup === muscle) && exerciseMatches(exercise.name, query)
+  ), [exercises, muscle, query])
 
   function toggleExercise(id: string) {
-    setSelectedExercises((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    )
+    setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
+    setConfigs((current) => current[id] ? current : ({ ...current, [id]: { exerciseId: id, targetSets: 3, minReps: 8, maxReps: 12, restSeconds: 90, supersetId: null, progression: { type: 'double-progression', increment: 2.5, minimumRir: 1 } } }))
+  }
+
+  async function save() {
+    if (!name.trim() || selected.length === 0 || saving) return
+    setSaving(true)
+    try {
+      const id = await addWorkout({ name: name.trim(), color, icon: 'Dumbbell', exerciseIds: selected, exerciseConfigs: selected.map((exerciseId) => configs[exerciseId]), scheduledWeekdays: weekdays })
+      router.push(`/workouts/detail?id=${id}`)
+    } catch {
+      setSaving(false)
+    }
+  }
+
+  async function fromTemplate(template: WorkoutTemplate) {
+    if (saving) return
+    setSaving(true)
+    const ids: string[] = []
+    for (const item of template.exercises) {
+      const existing = exercises.find((exercise) => exercise.name.toLowerCase() === item.name.toLowerCase())
+      if (existing) {
+        ids.push(existing.id)
+        if (!existing.notes && item.notes) await updateExercise(existing.id, { notes: item.notes })
+      } else ids.push(await addExercise({ name: item.name, muscleGroup: item.muscleGroup, notes: item.notes }))
+    }
+    const exerciseConfigs = ids.map((exerciseId) => ({ exerciseId, targetSets: 3, minReps: 8, maxReps: 12, restSeconds: 90, supersetId: null, progression: { type: 'double-progression' as const, increment: 2.5, minimumRir: 1 } }))
+    const id = await addWorkout({ name: template.name, color: template.color, icon: 'Dumbbell', exerciseIds: ids, exerciseConfigs, scheduledWeekdays: [] })
+    router.push(`/workouts/detail?id=${id}`)
   }
 
   async function createExercise() {
     if (!exName.trim()) return
-    await addExercise({ name: exName.trim(), muscleGroup: exMuscle, notes: exNotes })
-    setExName('')
-    setExNotes('')
-    setShowExModal(false)
-  }
-
-  async function handleSave() {
-    if (!name.trim()) return
-    setSaving(true)
-    const id = await addWorkout({
-      name: name.trim(),
-      color,
-      icon: 'Dumbbell',
-      exerciseIds: selectedExercises,
-    })
-    router.push(`/workouts/detail?id=${id}`)
-  }
-
-  async function createFromTemplate(template: WorkoutTemplate) {
-    setSaving(true)
-    const exerciseIds: string[] = []
-
-    for (const templateExercise of template.exercises) {
-      const existing = exercises.find((exercise) => exercise.name.toLowerCase() === templateExercise.name.toLowerCase())
-      if (existing) {
-        exerciseIds.push(existing.id)
-        if (!existing.notes && templateExercise.notes) {
-          await updateExercise(existing.id, { notes: templateExercise.notes })
-        }
-      } else {
-        const id = await addExercise({
-          name: templateExercise.name,
-          muscleGroup: templateExercise.muscleGroup,
-          notes: templateExercise.notes,
-        })
-        exerciseIds.push(id)
-      }
-    }
-
-    const workoutId = await addWorkout({
-      name: template.name,
-      color: template.color,
-      icon: 'Dumbbell',
-      exerciseIds,
-    })
-    router.push(`/workouts/detail?id=${workoutId}`)
+    const id = await addExercise({ name: exName.trim(), muscleGroup: exMuscle, notes: exNotes })
+    toggleExercise(id); setExName(''); setExNotes(''); setShowCreate(false)
   }
 
   return (
-    <div className="px-4 pt-14 pb-28 page-content max-w-lg mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => router.back()} className="rounded-xl p-2 hover:bg-white/10 text-zinc-400 hover:text-white transition-colors">
-          <ArrowLeft size={20} />
-        </button>
-        <div>
-          <h1 className="text-2xl font-bold text-white">Novo Treino</h1>
+    <div className="apple-page page-content page-narrow">
+      <LocalNav
+        title="Novo treino"
+        back="/workouts"
+        actions={<button type="button" onClick={save} disabled={!name.trim() || selected.length === 0 || saving} className="pill">{saving ? 'Salvando' : 'Criar'}</button>}
+      />
+      <Hero eyebrow="Biblioteca" title="Novo treino." lede="Dê um nome, escolha os exercícios e, se quiser, os dias da semana." />
+
+      <button type="button" onClick={() => setShowTemplates(true)} className="tile tile-dark tile-link mt-8 flex w-full items-center gap-4 !py-6 text-left">
+        <span aria-hidden className="flex h-11 w-11 flex-none items-center justify-center rounded-full bg-white/12 text-[#ff8a3d]"><Sparkles size={19} /></span>
+        <span className="min-w-0 flex-1">
+          <span className="headline block text-[#f5f5f7]">Começar com um modelo</span>
+          <span className="footnote block text-[#a1a1a6]">Rotinas enxutas para diferentes frequências</span>
+        </span>
+        <ChevronRight size={18} className="text-[#2997ff]" aria-hidden />
+      </button>
+
+      <section className="stack-section space-y-6" aria-label="Detalhes">
+        <Input label="Nome da rotina" placeholder="Ex.: Superior A" value={name} onChange={(event) => setName(event.target.value)} hint={selected.length === 0 ? 'Selecione ao menos um exercício abaixo para criar.' : `${selected.length} exercício${selected.length > 1 ? 's' : ''} selecionado${selected.length > 1 ? 's' : ''}.`} />
+        <fieldset>
+          <legend className="mb-2 px-1 text-[13px] font-semibold text-[var(--muted)]">Cor</legend>
+          <div className="flex flex-wrap gap-1">{WORKOUT_COLORS.map((item) => <button key={item} type="button" onClick={() => setColor(item)} aria-pressed={color === item} className="flex h-11 w-11 items-center justify-center rounded-full" aria-label={`Cor ${COLOR_NAMES[item] ?? item}`}><span className="flex h-7 w-7 items-center justify-center rounded-full transition-transform" style={{ background: item, color: readableOn(item), boxShadow: color === item ? `0 0 0 2px var(--background), 0 0 0 4px ${item}` : undefined }}>{color === item && <Check size={14} strokeWidth={3} aria-hidden />}</span></button>)}</div>
+        </fieldset>
+        <fieldset>
+          <legend className="mb-2 px-1 text-[13px] font-semibold text-[var(--muted)]">Dias da semana (opcional)</legend>
+          <div className="grid grid-cols-7 gap-1.5">{WEEKDAYS.map((day, index) => <button key={index} type="button" aria-pressed={weekdays.includes(index)} aria-label={WEEKDAY_NAMES[index]} onClick={() => setWeekdays((current) => current.includes(index) ? current.filter((item) => item !== index) : [...current, index])} className={`h-11 rounded-full text-[15px] font-semibold transition-colors ${weekdays.includes(index) ? 'bg-[var(--foreground)] text-[var(--background-elevated)]' : 'bg-[var(--fill-strong)]'}`}>{day}</button>)}</div>
+        </fieldset>
+      </section>
+
+      <section className="stack-section" aria-labelledby="exercises-title">
+        <div className="mb-4 flex items-end justify-between px-1"><h2 id="exercises-title" className="section-title">Exercícios.</h2><button type="button" onClick={() => setShowCreate(true)} className="link -mb-2.5 text-[17px]"><Plus size={17} aria-hidden />Novo</button></div>
+        <label className="relative mb-3 block"><span className="sr-only">Buscar exercício</span><Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted)]" aria-hidden /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar" className="field !pl-11" /></label>
+        <div className="scroll-row mb-4" role="group" aria-label="Filtrar por grupo muscular">
+          {['Todos', ...MUSCLE_GROUPS].map((item) => <button key={item} type="button" aria-pressed={muscle === item} onClick={() => setMuscle(item)} className="chip">{item}</button>)}
         </div>
-      </div>
+        <div className="list max-h-[29rem] overflow-y-auto">{filtered.map((exercise) => {
+          const checked = selected.includes(exercise.id)
+          return <button key={exercise.id} type="button" aria-label={`${checked ? 'Remover' : 'Selecionar'} ${exercise.name}`} onClick={() => toggleExercise(exercise.id)} aria-pressed={checked} className="grouped-row flex min-h-14 w-full items-center gap-4 px-5 py-3 text-left"><span className="min-w-0 flex-1"><span className="block truncate">{exercise.name}</span><span className="footnote text-[var(--muted)]">{exercise.muscleGroup}{exercise.equipment ? ` · ${exercise.equipment}` : ''}</span></span><span aria-hidden className={`flex h-6 w-6 flex-none items-center justify-center rounded-full transition-colors ${checked ? 'bg-[var(--accent-fill)] text-white' : 'shadow-[inset_0_0_0_1.5px_var(--separator)]'}`}>{checked && <Check size={14} strokeWidth={3} />}</span></button>
+        })}{filtered.length === 0 && <p className="subhead p-8 text-center text-[var(--muted)]">Nenhum exercício encontrado.</p>}</div>
+      </section>
 
-      <div className="space-y-5">
-        <section>
-          <div className="mb-3 flex items-center gap-2">
-            <Sparkles size={15} className="text-[var(--accent)]" />
-            <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Templates pesquisados</p>
-          </div>
-          <div className="grid gap-2">
-            {WORKOUT_TEMPLATES.map((template) => (
-              <button
-                key={template.id}
-                type="button"
-                onClick={() => createFromTemplate(template)}
-                disabled={saving}
-                className="w-full rounded-2xl border p-3 text-left transition-colors disabled:opacity-50"
-                style={{
-                  background: 'var(--glass-strong)',
-                  borderColor: 'var(--border)',
-                }}
-              >
-                <div className="flex items-start gap-3">
-                  <span className="mt-1 h-3 w-3 flex-none rounded-full" style={{ background: template.color }} />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-bold text-white">{template.name}</p>
-                    <p className="mt-0.5 text-xs text-zinc-500">{template.description}</p>
-                    <p className="mt-2 text-[11px] font-semibold text-[var(--accent)]">
-                      {template.frequency} - {template.exercises.length} exercicios
-                    </p>
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        {/* Name */}
-        <Input
-          label="Nome do treino"
-          placeholder="Ex: Push, Pull, Legs..."
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-
-        {/* Color */}
-        <div className="flex flex-col gap-2">
-          <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Cor</p>
-          <div className="flex gap-2 flex-wrap">
-            {WORKOUT_COLORS.map((c) => (
-              <button
-                key={c}
-                onClick={() => setColor(c)}
-                className="w-8 h-8 rounded-full transition-colors"
-                style={{
-                  background: c,
-                  transform: color === c ? 'scale(1.2)' : 'scale(1)',
-                  outline: color === c ? `2px solid ${c}` : 'none',
-                  outlineOffset: '2px',
-                }}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* Preview */}
-        <div
-          className="rounded-2xl p-4 flex items-center gap-3 border"
-          style={{ background: `${color}08`, borderColor: `${color}30` }}
-        >
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${color}25` }}>
-            <span style={{ color }} className="text-lg">💪</span>
-          </div>
-          <div>
-            <p className="font-bold text-white">{name || 'Nome do treino'}</p>
-            <p className="text-xs text-zinc-500">{selectedExercises.length} exercício(s)</p>
-          </div>
-        </div>
-
-        {/* Exercises */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Exercícios</p>
-            <button
-              onClick={() => setShowExModal(true)}
-              className="text-xs text-indigo-400 flex items-center gap-1 hover:text-indigo-300 transition-colors"
-            >
-              <Plus size={14} />
-              Criar novo
-            </button>
-          </div>
-
-          <div className="relative mb-3">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
-            <input
-              value={exSearch}
-              onChange={(e) => setExSearch(e.target.value)}
-              placeholder="Buscar exercício..."
-              className="w-full h-10 rounded-xl bg-white/5 border border-white/10 pl-9 pr-4 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
-            />
-          </div>
-
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {filtered.length === 0 && (
-              <p className="text-sm text-zinc-600 text-center py-4">
-                {exercises.length === 0 ? 'Crie seu primeiro exercício' : 'Nenhum exercício encontrado'}
-              </p>
-            )}
-            {filtered.map((e) => {
-              const selected = selectedExercises.includes(e.id)
-              return (
-                <button
-                  key={e.id}
-                  onClick={() => toggleExercise(e.id)}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl transition-colors text-left"
-                  style={{
-                    background: selected ? `${color}15` : 'rgba(255,255,255,0.03)',
-                    border: `1px solid ${selected ? color + '30' : 'rgba(255,255,255,0.06)'}`,
-                  }}
-                >
-                  <div
-                    className="w-5 h-5 rounded-md flex items-center justify-center flex-none border transition-colors"
-                    style={{
-                      background: selected ? color : 'transparent',
-                      borderColor: selected ? color : 'rgba(255,255,255,0.15)',
-                    }}
-                  >
-                    {selected && <Check size={12} className="text-white" />}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-white">{e.name}</p>
-                    <p className="text-xs text-zinc-500">{e.muscleGroup}</p>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        <Button
-          className="w-full"
-          size="lg"
-          onClick={handleSave}
-          disabled={!name.trim() || saving}
-        >
-          {saving ? 'Salvando...' : 'Criar Treino'}
-        </Button>
-      </div>
-
-      {/* New Exercise Modal */}
-      <Modal open={showExModal} onClose={() => setShowExModal(false)} title="Novo Exercício">
-        <div className="space-y-4">
-          <Input
-            label="Nome"
-            placeholder="Ex: Supino Reto"
-            value={exName}
-            onChange={(e) => setExName(e.target.value)}
-          />
-          <Select
-            label="Grupo muscular"
-            value={exMuscle}
-            onChange={(e) => setExMuscle(e.target.value as typeof exMuscle)}
-            options={MUSCLE_GROUPS.map((g) => ({ value: g, label: g }))}
-          />
-          <TextArea
-            label="Observações (opcional)"
-            placeholder="Dicas de execução..."
-            value={exNotes}
-            onChange={(e) => setExNotes(e.target.value)}
-            rows={2}
-          />
-          <div className="flex gap-3 pt-2">
-            <Button variant="outline" className="flex-1" onClick={() => setShowExModal(false)}>
-              Cancelar
-            </Button>
-            <Button className="flex-1" onClick={createExercise} disabled={!exName.trim()}>
-              Criar
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      <Modal open={showTemplates} onClose={() => setShowTemplates(false)} title="Modelos"><div className="list !bg-[var(--fill)]">{WORKOUT_TEMPLATES.map((template) => <button key={template.id} type="button" onClick={() => void fromTemplate(template)} disabled={saving} className="grouped-row flex min-h-16 w-full items-center gap-4 px-4 py-3 text-left disabled:opacity-50"><span aria-hidden className="h-8 w-1.5 flex-none rounded-full" style={{ background: template.color }} /><span className="flex-1"><span className="headline block">{template.name}</span><span className="footnote text-[var(--muted)]">{template.frequency} · {template.exercises.length} exercícios</span></span><ChevronRight size={17} className="text-[var(--muted)]" aria-hidden /></button>)}</div></Modal>
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Novo exercício"><div className="space-y-4"><Input label="Nome" value={exName} onChange={(event) => setExName(event.target.value)} /><Select label="Grupo muscular" value={exMuscle} onChange={(event) => setExMuscle(event.target.value as MuscleGroup)} options={MUSCLE_GROUPS.map((item) => ({ value: item, label: item }))} /><TextArea label="Notas" value={exNotes} onChange={(event) => setExNotes(event.target.value)} rows={2} /><Button size="lg" className="w-full" onClick={createExercise} disabled={!exName.trim()}>Criar e selecionar</Button></div></Modal>
     </div>
   )
 }

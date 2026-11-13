@@ -1,30 +1,32 @@
 'use client'
 
-import { useState } from 'react'
-import { User, Weight, Plus, Trash2, Download, Upload, Edit3, Check, Shield, Palette } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
+import { ChevronRight, FileDown, FileLock2, FileSpreadsheet, FileUp, Images, Pencil, Plus, Settings, Trash2, Trophy, Upload } from 'lucide-react'
 import { useProfileStore } from '@/stores/useProfileStore'
-import { Card } from '@/components/ui/Card'
+import { useWorkoutStore } from '@/stores/useWorkoutStore'
+import { useSessionStore } from '@/stores/useSessionStore'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
-import { Progress } from '@/components/ui/Progress'
-import { ThemeToggle } from '@/components/layout/ThemeToggle'
-import { VisualEffectsToggle } from '@/components/layout/VisualEffectsToggle'
+import { LocalNav, SectionHeader } from '@/components/layout/PageHeader'
 import { SupabaseAccountCard } from '@/components/auth/SupabaseAccountCard'
+import { LineChart } from '@/components/insights/LineChart'
+import { useMediaUrl } from '@/components/training/MediaViewer'
 import { getLevelFromXp, levelTitle } from '@/lib/gamification'
-import { exportData, importData } from '@/lib/db'
-import { formatDate } from '@/lib/utils'
-import type { BodyMeasurement } from '@/types'
+import { exportData, importData, parseBackup, type ParsedBackup } from '@/lib/backup'
+import { formatDate, formatDecimal, parseDecimal } from '@/lib/utils'
+import { exportSessionsCsv, importTrainingCsv } from '@/lib/csvInterop'
+import { listMedia } from '@/lib/media'
+import { trendPer30Days } from '@/lib/insights'
+import type { BodyMeasurement, MediaItem } from '@/types'
 import { format } from 'date-fns'
-import { ptBR } from 'date-fns/locale'
-
-const GREEN  = '#00c896'
-const INDIGO = '#6366f1'
-const AMBER  = '#f59e0b'
+import { ACHIEVEMENTS } from '@/lib/achievements'
 
 const MEASUREMENT_FIELDS: Array<{ key: keyof BodyMeasurement; label: string; unit: string }> = [
   { key: 'weight',   label: 'Peso',        unit: 'kg' },
   { key: 'bodyFat',  label: 'BF%',         unit: '%'  },
+  { key: 'leanMass', label: 'Massa magra', unit: 'kg' },
   { key: 'chest',    label: 'Peitoral',    unit: 'cm' },
   { key: 'arm',      label: 'Braço',       unit: 'cm' },
   { key: 'forearm',  label: 'Antebraço',   unit: 'cm' },
@@ -34,63 +36,58 @@ const MEASUREMENT_FIELDS: Array<{ key: keyof BodyMeasurement; label: string; uni
   { key: 'calf',     label: 'Panturrilha', unit: 'cm' },
 ]
 
-function WeightSparkline({ data }: { data: Array<{ date: string; weight: number }> }) {
-  const width = 260
-  const height = 72
-  const weights = data.map((item) => item.weight)
-  const min = Math.min(...weights)
-  const max = Math.max(...weights)
-  const range = Math.max(max - min, 1)
-  const step = data.length > 1 ? width / (data.length - 1) : width
-  const points = data.map((item, index) => {
-    const x = index * step
-    const y = height - ((item.weight - min) / range) * (height - 12) - 6
-    return { x, y, key: `${item.date}-${index}` }
-  })
-
-  return (
-    <div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="h-20 w-full overflow-visible" role="img" aria-label="Evolucao do peso">
-        <polyline
-          points={points.map((point) => `${point.x},${point.y}`).join(' ')}
-          fill="none"
-          stroke={GREEN}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="4"
-        />
-        {points.map((point) => (
-          <circle key={point.key} cx={point.x} cy={point.y} r="4" fill={GREEN} />
-        ))}
-      </svg>
-      <div className="flex justify-between text-[10px] font-medium text-zinc-500">
-        <span>{data[0]?.date}</span>
-        <span>{data[data.length - 1]?.date}</span>
-      </div>
-    </div>
+/** Settings-style row: icon chip, label, optional detail, chevron. */
+function LinkRow({ icon, label, detail, onClick, href }: { icon: React.ReactNode; label: string; detail?: string; onClick?: () => void; href?: string }) {
+  const content = (
+    <>
+      <span aria-hidden className="icon-chip">{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block">{label}</span>
+        {detail && <span className="footnote block text-[var(--muted)]">{detail}</span>}
+      </span>
+      <ChevronRight size={18} className="flex-none text-[var(--muted)] opacity-70" aria-hidden />
+    </>
   )
+  const className = 'grouped-row sep-inset-72 flex min-h-14 w-full items-center gap-4 px-5 py-2.5 text-left'
+  if (href) return <Link href={href} className={className}>{content}</Link>
+  return <button type="button" onClick={onClick} className={className}>{content}</button>
 }
 
 export default function ProfilePage() {
-  const { profile, measurements, updateProfile, addMeasurement, deleteMeasurement, load } = useProfileStore()
+  const profile = useProfileStore((state) => state.profile)
+  const measurements = useProfileStore((state) => state.measurements)
+  const achievements = useProfileStore((state) => state.achievements)
+  const updateProfile = useProfileStore((state) => state.updateProfile)
+  const addMeasurement = useProfileStore((state) => state.addMeasurement)
+  const deleteMeasurement = useProfileStore((state) => state.deleteMeasurement)
+  const load = useProfileStore((state) => state.load)
+  const loadWorkouts = useWorkoutStore((state) => state.load)
+  const workouts = useWorkoutStore((state) => state.workouts)
+  const exercises = useWorkoutStore((state) => state.exercises)
+  const [deleteTarget, setDeleteTarget] = useState<BodyMeasurement | null>(null)
   const [showMeasModal, setShowMeasModal] = useState(false)
-  const [editName, setEditName]   = useState(false)
+  const [editName, setEditName] = useState(false)
   const [nameInput, setNameInput] = useState(profile?.name ?? '')
-  const [measForm, setMeasForm]   = useState<Record<string, string>>({})
+  const [measForm, setMeasForm] = useState<Record<string, string>>({})
   const [importStatus, setImportStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [pendingImport, setPendingImport] = useState<ParsedBackup | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [photos, setPhotos] = useState<MediaItem[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const csvInputRef = useRef<HTMLInputElement>(null)
 
-  const levelInfo = profile
-    ? getLevelFromXp(profile.xp)
-    : { level: 1, currentXp: 0, xpNeeded: 100 }
+  useEffect(() => {
+    void listMedia('photo').then(setPhotos).catch(() => setPhotos([]))
+  }, [])
 
-  const weightHistory = measurements
+  const levelInfo = profile ? getLevelFromXp(profile.xp) : { level: 1, currentXp: 0, xpNeeded: 100 }
+
+  const weightPoints = useMemo(() => measurements
     .filter((m) => m.weight != null)
-    .slice(0, 12)
+    .slice(0, 24)
     .reverse()
-    .map((m) => ({
-      date: format(new Date(m.date), 'dd/MM', { locale: ptBR }),
-      weight: m.weight as number,
-    }))
+    .map((m) => ({ date: new Date(m.date), value: m.weight as number })), [measurements])
+  const weightTrend = trendPer30Days(weightPoints)
 
   async function saveName() {
     if (nameInput.trim()) {
@@ -102,11 +99,10 @@ export default function ProfilePage() {
   async function saveMeasurement() {
     const data: Partial<BodyMeasurement> = { date: new Date(), id: '' }
     MEASUREMENT_FIELDS.forEach(({ key }) => {
-      const val = parseFloat(measForm[key] ?? '')
-      ;(data as Record<string, number | Date | string | null>)[key as string] =
-        !isNaN(val) && val > 0 ? val : null
+      const val = parseDecimal(measForm[key] ?? '')
+      ;(data as Record<string, number | Date | string | null>)[key as string] = val != null && val > 0 ? val : null
     })
-    await addMeasurement(data as Omit<BodyMeasurement, 'id'>)
+    await addMeasurement(data as Omit<BodyMeasurement, 'id' | 'updatedAt'>)
     setMeasForm({})
     setShowMeasModal(false)
   }
@@ -114,9 +110,9 @@ export default function ProfilePage() {
   async function handleExport() {
     const data = await exportData()
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a')
-    a.href     = url
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
     a.download = `workoutpro-backup-${format(new Date(), 'yyyy-MM-dd')}.json`
     a.click()
     URL.revokeObjectURL(url)
@@ -125,236 +121,280 @@ export default function ProfilePage() {
   async function handleImport(file: File) {
     try {
       setImportStatus(null)
-      const text = await file.text()
-      await importData(JSON.parse(text))
-      await load()
-      setImportStatus({ type: 'success', message: 'Dados importados com sucesso.' })
+      setPendingImport(null)
+      setPendingImport(parseBackup(JSON.parse(await file.text())))
     } catch {
       setImportStatus({ type: 'error', message: 'Nao foi possivel importar. Verifique o arquivo.' })
     }
   }
 
+  function downloadCsv() {
+    const blob = new Blob([exportSessionsCsv(useProfileStore.getState().sessions, workouts, exercises)], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob); const anchor = document.createElement('a')
+    anchor.href = url; anchor.download = `workoutpro-historico-${format(new Date(), 'yyyy-MM-dd')}.csv`; anchor.click(); URL.revokeObjectURL(url)
+  }
+
+  async function handleCsv(file: File) {
+    try {
+      const result = await importTrainingCsv(await file.text())
+      await Promise.all([load(), loadWorkouts()])
+      setImportStatus({ type: 'success', message: `${result.sessions} sessões e ${result.sets} séries importadas do CSV.` })
+    } catch {
+      setImportStatus({ type: 'error', message: 'CSV não reconhecido. Use uma exportação do Strong ou Hevy.' })
+    }
+  }
+
+  async function confirmImport() {
+    if (!pendingImport || importing) return
+    setImporting(true)
+    try {
+      await importData(pendingImport)
+      useSessionStore.getState().discardSession()
+      await Promise.all([load(), loadWorkouts()])
+      setPendingImport(null)
+      setImportStatus({ type: 'success', message: 'Backup validado e importado com sucesso.' })
+    } catch {
+      setImportStatus({ type: 'error', message: 'A importacao falhou sem substituir seus dados atuais.' })
+    } finally {
+      setImporting(false)
+    }
+  }
+
   if (!profile) return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
-        style={{ borderColor: `${GREEN} transparent transparent transparent` }}
-      />
+    <div className="flex min-h-screen items-center justify-center" role="status">
+      <div className="h-7 w-7 animate-spin rounded-full border-2 border-[var(--muted)] border-t-transparent" />
+      <span className="sr-only">Carregando perfil</span>
     </div>
   )
 
+  const initials = (profile.name.trim().split(/\s+/).map((part) => part[0]).slice(0, 2).join('') || 'A').toUpperCase()
+  const latestWeight = weightPoints.at(-1)
+
   return (
-    <div className="px-4 pt-14 pb-28 page-content max-w-lg mx-auto space-y-5">
-      <div>
-        <p className="text-sm font-medium text-zinc-500">Seu</p>
-        <h1 className="text-3xl font-bold tracking-tight text-white">Perfil</h1>
-      </div>
+    <div className="apple-page page-content">
+      <LocalNav title="Você" actions={<Link href="/settings" className="pill pill-secondary" aria-label="Ajustes"><Settings size={14} aria-hidden />Ajustes</Link>} />
 
-      {/* Identity card — glass */}
-      <Card glass glow={INDIGO} className="p-5">
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center flex-none"
-            style={{ background: `linear-gradient(135deg, ${INDIGO}cc, #7c3aed)` }}
-          >
-            <User size={26} className="text-white" />
-          </div>
-          <div className="flex-1 min-w-0">
-            {editName ? (
-              <div className="flex items-center gap-2">
-                <input
-                  autoFocus
-                  value={nameInput}
-                  onChange={(e) => setNameInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && saveName()}
-                  className="flex-1 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none"
-                  style={{
-                    background: 'rgba(255,255,255,0.06)',
-                    border: `1px solid ${INDIGO}60`,
-                  }}
-                />
-                <button onClick={saveName} style={{ color: GREEN }}>
-                  <Check size={18} />
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <p className="text-xl font-bold text-white">{profile.name}</p>
-                <button
-                  onClick={() => { setNameInput(profile.name); setEditName(true) }}
-                  className="text-zinc-600 hover:text-zinc-300 transition-colors"
-                >
-                  <Edit3 size={13} />
-                </button>
-              </div>
-            )}
-            <p className="text-sm font-medium mt-0.5" style={{ color: INDIGO }}>
-              {levelTitle(levelInfo.level)}
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-4">
-          <div className="flex justify-between text-[11px] text-zinc-500 mb-2">
-            <span>Nível {levelInfo.level}</span>
-            <span>{levelInfo.currentXp.toLocaleString()} / {levelInfo.xpNeeded.toLocaleString()} XP</span>
-          </div>
-          <Progress value={levelInfo.currentXp} max={levelInfo.xpNeeded} color={INDIGO} />
-        </div>
-      </Card>
-
-      {/* Stats grid */}
-      <div className="grid grid-cols-2 gap-3">
-        {[
-          { label: 'Treinos',       value: `${profile.totalWorkouts}`,         color: INDIGO },
-          { label: 'XP Total',      value: profile.xp.toLocaleString(),        color: GREEN  },
-          { label: 'Streak',        value: `${profile.streak} dias`,           color: AMBER  },
-          { label: 'Maior Streak',  value: `${profile.longestStreak} dias`,    color: AMBER  },
-        ].map((item) => (
-          <Card key={item.label} className="p-4">
-            <p className="text-xl font-bold text-white tracking-tight">{item.value}</p>
-            <p className="text-[11px] mt-1 font-medium" style={{ color: item.color }}>{item.label}</p>
-          </Card>
-        ))}
-      </div>
-
-      {/* Body measurements */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-white">Medidas Corporais</h2>
-          <Button size="sm" variant="secondary" onClick={() => setShowMeasModal(true)}>
-            <Plus size={13} />
-            Registrar
-          </Button>
-        </div>
-
-        {weightHistory.length >= 2 && (
-          <Card className="p-4 mb-3">
-            <p className="text-[11px] text-zinc-500 mb-3 font-medium">Evolução do peso (kg)</p>
-            <WeightSparkline data={weightHistory} />
-          </Card>
-        )}
-
-        {measurements.length === 0 ? (
-          <div className="text-center py-10 text-zinc-600">
-            <Weight size={28} className="mx-auto mb-2 opacity-30" />
-            <p className="text-sm">Nenhuma medida registrada</p>
+      {/* Identity */}
+      <header className="hero flex flex-col items-center text-center">
+        <span aria-hidden className="flex h-24 w-24 items-center justify-center rounded-full bg-[var(--foreground)] text-[36px] font-semibold tracking-[-0.02em] text-[var(--background-elevated)]">
+          {initials}
+        </span>
+        <h1 className="sr-only">Perfil</h1>
+        {editName ? (
+          <div className="mt-5 flex w-full max-w-xs items-center gap-2">
+            <input
+              autoFocus
+              aria-label="Seu nome"
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void saveName()
+                if (e.key === 'Escape') setEditName(false)
+              }}
+              className="field min-w-0 flex-1 text-center"
+            />
+            <Button size="sm" onClick={saveName} className="h-11">OK</Button>
           </div>
         ) : (
-          <div className="space-y-2">
-            {measurements.slice(0, 5).map((m) => (
-              <Card key={m.id} className="p-3 flex items-center gap-3">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white">{formatDate(new Date(m.date))}</p>
-                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
-                    {MEASUREMENT_FIELDS.filter(({ key }) => m[key] != null).map(({ key, label, unit }) => (
-                      <span key={key} className="text-[11px] text-zinc-500">
-                        {label}:{' '}
-                        <span className="text-zinc-300 font-medium">
-                          {String(m[key])} {unit}
-                        </span>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <button
-                  onClick={() => deleteMeasurement(m.id)}
-                  className="p-1.5 text-zinc-700 hover:text-rose-400 transition-colors"
-                >
-                  <Trash2 size={13} />
-                </button>
-              </Card>
-            ))}
+          <button type="button" onClick={() => { setNameInput(profile.name); setEditName(true) }} className="mt-5 flex min-h-11 items-center gap-2 rounded-full px-3" aria-label={`Editar nome: ${profile.name}`}>
+            <span className="display">{profile.name}</span>
+            <Pencil size={16} className="text-[var(--muted)]" aria-hidden />
+          </button>
+        )}
+        <p className="eyebrow mt-1">{levelTitle(levelInfo.level)} · Nível {levelInfo.level}</p>
+        <div className="mt-5 w-full max-w-xs">
+          <div className="progress-track" role="progressbar" aria-label={`Progresso para o nível ${levelInfo.level + 1}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((levelInfo.currentXp / levelInfo.xpNeeded) * 100)}>
+            <div className="progress-fill" style={{ width: `${(levelInfo.currentXp / levelInfo.xpNeeded) * 100}%` }} />
+          </div>
+          <p className="footnote numeric mt-2 text-[var(--muted)]">{levelInfo.currentXp.toLocaleString('pt-BR')} de {levelInfo.xpNeeded.toLocaleString('pt-BR')} XP para o nível {levelInfo.level + 1}</p>
+        </div>
+      </header>
+
+      <section className="tile mt-10 grid grid-cols-3 gap-2 !px-5 text-center" aria-label="Seus números">
+        {[
+          { label: 'Treinos', value: `${profile.totalWorkouts}`, testId: 'profile-total-workouts' },
+          { label: 'Sequência', value: `${profile.streak}`, unit: profile.streak === 1 ? 'dia' : 'dias' },
+          { label: 'Recorde', value: `${profile.longestStreak}`, unit: profile.longestStreak === 1 ? 'dia' : 'dias' },
+        ].map((item) => (
+          <div key={item.label} className="min-w-0">
+            <p data-testid={item.testId} className="stat text-[32px]">{item.value}</p>
+            <p className="footnote mt-1 text-[var(--muted)]">{item.unit ? `${item.label} · ${item.unit}` : item.label}</p>
+          </div>
+        ))}
+      </section>
+
+      {/* Body */}
+      <section aria-labelledby="measurements-title" className="stack-section">
+        <SectionHeader id="measurements-title" title="Corpo." action={<Button size="sm" variant="tinted" onClick={() => setShowMeasModal(true)} className="-mb-1"><Plus size={16} aria-hidden />Registrar</Button>} />
+        {latestWeight && (
+          <div className="tile mb-3">
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <p className="subhead text-[var(--muted)]">Peso</p>
+                <p className="stat text-[40px]">{formatDecimal(latestWeight.value)}<span className="stat-unit">kg</span></p>
+              </div>
+              {weightTrend != null && (
+                <p className="subhead text-right text-[var(--muted)]">
+                  {weightTrend >= 0 ? '+' : ''}{formatDecimal(Math.round(weightTrend * 10) / 10)} kg/mês
+                </p>
+              )}
+            </div>
+            {weightPoints.length >= 2 && (
+              <div className="mt-4">
+                <LineChart
+                  points={weightPoints}
+                  height={120}
+                  format={(value) => `${formatDecimal(value)} kg`}
+                  label={`Evolução do peso: de ${formatDecimal(weightPoints[0].value)} kg a ${formatDecimal(latestWeight.value)} kg.`}
+                />
+              </div>
+            )}
           </div>
         )}
-      </div>
 
-      <Card className="p-4">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="soft-icon flex h-11 w-11 items-center justify-center rounded-2xl">
-              <Palette size={18} />
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold text-white">Aparencia</h2>
-              <p className="text-xs text-zinc-500">Alternar entre tema claro e escuro</p>
-            </div>
+        <PhotosTile photos={photos} />
+
+        {measurements.length === 0 ? (
+          <div className="tile mt-3 text-center">
+            <p className="headline">Nenhuma medida ainda</p>
+            <p className="footnote mt-1 text-[var(--muted)]">Registre peso e circunferências para ver sua evolução.</p>
           </div>
-          <ThemeToggle />
-        </div>
-        <div className="mt-3">
-          <VisualEffectsToggle />
-        </div>
-      </Card>
+        ) : (
+          <ul className="list mt-3">
+            {measurements.slice(0, 5).map((m) => (
+              <li key={m.id} className="grouped-row flex items-center gap-3 py-3 pl-5 pr-2">
+                <div className="min-w-0 flex-1">
+                  <p>{formatDate(new Date(m.date))}</p>
+                  <p className="footnote numeric mt-0.5 text-[var(--muted)]">
+                    {MEASUREMENT_FIELDS.filter(({ key }) => m[key] != null).map(({ key, label, unit }) => `${label} ${formatDecimal(m[key] as number)} ${unit}`).join(' · ')}
+                  </p>
+                </div>
+                <button type="button" onClick={() => setDeleteTarget(m)} aria-label={`Excluir medida de ${formatDate(new Date(m.date))}`} className="flex h-11 w-11 flex-none items-center justify-center rounded-full text-[var(--muted)]">
+                  <Trash2 size={17} aria-hidden />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
-      <SupabaseAccountCard />
+      <section aria-labelledby="more-title" className="stack-section">
+        <h2 id="more-title" className="list-header">Mais</h2>
+        <div className="list">
+          <LinkRow icon={<Trophy size={17} aria-hidden />} label="Prêmios" detail={`${achievements.length} de ${ACHIEVEMENTS.length} conquistados`} href="/achievements" />
+          <LinkRow icon={<Settings size={17} aria-hidden />} label="Ajustes" detail="Metas, lembretes, saúde e aparência" href="/settings" />
+        </div>
+      </section>
 
-      {/* Backup */}
-      <Card className="p-4">
-        <div className="flex items-center gap-2 mb-4">
-          <Shield size={14} className="text-zinc-500" />
-          <h2 className="text-sm font-semibold text-white">Backup de dados</h2>
+      <section aria-labelledby="account-title" className="stack-section">
+        <h2 id="account-title" className="list-header">Conta</h2>
+        <SupabaseAccountCard />
+      </section>
+
+      <section aria-labelledby="data-title" className="stack-section">
+        <h2 id="data-title" className="list-header">Seus dados</h2>
+        <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void handleImport(file) }} />
+        <input ref={csvInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void handleCsv(file) }} />
+        <div className="list">
+          <LinkRow icon={<FileDown size={17} aria-hidden />} label="Exportar backup" detail="Arquivo .json com tudo" onClick={handleExport} />
+          <LinkRow icon={<FileUp size={17} aria-hidden />} label="Importar backup" onClick={() => fileInputRef.current?.click()} />
+          <LinkRow icon={<FileSpreadsheet size={17} aria-hidden />} label="Exportar histórico CSV" onClick={downloadCsv} />
+          <LinkRow icon={<Upload size={17} aria-hidden />} label="Importar do Strong / Hevy" detail="Arquivo .csv" onClick={() => csvInputRef.current?.click()} />
+          <LinkRow icon={<FileLock2 size={17} aria-hidden />} label="Privacidade e diagnóstico" href="/privacy" />
         </div>
-        <div className="flex gap-3">
-          <Button variant="outline" className="flex-1" onClick={handleExport}>
-            <Download size={15} />
-            Exportar
-          </Button>
-          <label className="flex-1">
-            <input
-              type="file"
-              accept=".json"
-              className="hidden"
-              onChange={(e) => e.target.files?.[0] && handleImport(e.target.files[0])}
-            />
-            <Button variant="outline" className="w-full" onClick={() => {}}>
-              <Upload size={15} />
-              Importar
-            </Button>
-          </label>
-        </div>
-        {importStatus && (
-          <p
-            className="mt-3 rounded-2xl px-3 py-2 text-xs font-medium"
-            style={{
-              background: importStatus.type === 'success' ? 'rgba(34, 197, 94, 0.12)' : 'rgba(244, 63, 94, 0.12)',
-              color: importStatus.type === 'success' ? 'var(--accent-green)' : '#f43f5e',
-              border: `1px solid ${importStatus.type === 'success' ? 'rgba(34, 197, 94, 0.18)' : 'rgba(244, 63, 94, 0.18)'}`,
-            }}
-          >
+        {importStatus ? (
+          <p role={importStatus.type === 'error' ? 'alert' : 'status'} className={`list-footer ${importStatus.type === 'error' ? 'text-[var(--danger)]' : 'text-[var(--success)]'}`}>
             {importStatus.message}
           </p>
+        ) : (
+          <p className="list-footer">Os dados ficam primeiro neste aparelho. Fotos e vídeos não entram no backup.</p>
         )}
-        <p className="text-[11px] text-zinc-700 mt-3 text-center">
-          Todos os dados ficam no seu dispositivo, sem nenhum servidor.
-        </p>
-      </Card>
+      </section>
 
-      {/* Measurement modal */}
-      <Modal open={showMeasModal} onClose={() => setShowMeasModal(false)} title="Registrar Medidas">
-        <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+      <Modal open={showMeasModal} onClose={() => setShowMeasModal(false)} title="Registrar medidas">
+        <div className="max-h-[60vh] space-y-3 overflow-y-auto">
           <div className="grid grid-cols-2 gap-3">
             {MEASUREMENT_FIELDS.map(({ key, label, unit }) => (
               <Input
                 key={key}
                 label={`${label} (${unit})`}
-                type="number"
+                type="text"
                 inputMode="decimal"
-                step="0.1"
-                placeholder="0"
+                autoComplete="off"
+                placeholder="—"
                 value={measForm[key] ?? ''}
-                onChange={(e) => setMeasForm((f) => ({ ...f, [key]: e.target.value }))}
+                onChange={(e) => {
+                  const text = e.target.value
+                  if (/^\d*([.,]\d{0,2})?$/.test(text)) setMeasForm((f) => ({ ...f, [key]: text }))
+                }}
               />
             ))}
           </div>
         </div>
-        <div className="flex gap-3 mt-4">
-          <Button variant="outline" className="flex-1" onClick={() => setShowMeasModal(false)}>
-            Cancelar
-          </Button>
-          <Button className="flex-1" onClick={saveMeasurement}>
-            Salvar
-          </Button>
+        <div className="mt-5 flex gap-3">
+          <Button variant="secondary" className="flex-1" onClick={() => setShowMeasModal(false)}>Cancelar</Button>
+          <Button className="flex-1" onClick={saveMeasurement}>Salvar</Button>
         </div>
       </Modal>
+
+      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Excluir medida">
+        <p className="subhead mb-6 text-[var(--muted)]">Excluir o registro de {deleteTarget ? formatDate(new Date(deleteTarget.date)) : ''}? Essa ação não pode ser desfeita.</p>
+        <div className="flex gap-3">
+          <Button variant="secondary" className="flex-1" onClick={() => setDeleteTarget(null)}>Cancelar</Button>
+          <Button variant="danger" className="flex-1" onClick={async () => { if (deleteTarget) await deleteMeasurement(deleteTarget.id); setDeleteTarget(null) }}><Trash2 size={15} aria-hidden />Excluir</Button>
+        </div>
+      </Modal>
+
+      <Modal open={!!pendingImport} onClose={() => setPendingImport(null)} title="Confirmar importacao">
+        {pendingImport && (
+          <div className="space-y-4">
+            <p className="subhead text-[var(--muted)]">
+              O arquivo foi validado. Confirmar substituirá os dados locais e preparará todo o conteúdo para sincronização.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {([['workouts', 'treinos'], ['exercises', 'exercícios'], ['sessions', 'sessões'], ['measurements', 'medidas']] as const).map(([key, label]) => (
+                <div key={key} className="rounded-[var(--radius-sm)] bg-[var(--fill)] p-3.5">
+                  <strong className="stat text-[22px]">{pendingImport.preview[key]}</strong>
+                  <span className="footnote ml-1.5 text-[var(--muted)]">{label}</span>
+                </div>
+              ))}
+            </div>
+            <p className="footnote text-[var(--muted)]">Perfil: {pendingImport.preview.profileName}</p>
+            <div className="flex gap-3">
+              <Button variant="secondary" className="flex-1" disabled={importing} onClick={() => setPendingImport(null)}>Cancelar</Button>
+              <Button className="flex-1" disabled={importing} onClick={confirmImport}>{importing ? 'Importando...' : 'Importar'}</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
+  )
+}
+
+function PhotosTile({ photos }: { photos: MediaItem[] }) {
+  const first = photos.at(-1)
+  const latest = photos[0]
+  const { url: firstUrl } = useMediaUrl(photos.length > 1 ? first?.id : null)
+  const { url: latestUrl } = useMediaUrl(latest?.id)
+  return (
+    <Link href="/photos" className="tile tile-link flex items-center gap-4 !py-5 !pl-5" aria-label={`Fotos de progresso: ${photos.length} ${photos.length === 1 ? 'foto' : 'fotos'}`}>
+      <span aria-hidden className="flex flex-none -space-x-4">
+        {latestUrl ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element -- local blob URL */}
+            {firstUrl && <img src={firstUrl} alt="" className="h-16 w-12 rounded-[10px] object-cover ring-2 ring-[var(--surface)]" />}
+            {/* eslint-disable-next-line @next/next/no-img-element -- local blob URL */}
+            <img src={latestUrl} alt="" className="h-16 w-12 rounded-[10px] object-cover ring-2 ring-[var(--surface)]" />
+          </>
+        ) : (
+          <span className="icon-chip h-14 w-14 rounded-[14px]"><Images size={22} /></span>
+        )}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="headline block">Fotos de progresso</span>
+        <span className="footnote block text-[var(--muted)]">{photos.length === 0 ? 'Compare antes e depois, lado a lado.' : `${photos.length} ${photos.length === 1 ? 'foto' : 'fotos'} · toque para comparar`}</span>
+      </span>
+      <ChevronRight size={18} className="flex-none text-[var(--muted)]" aria-hidden />
+    </Link>
   )
 }
