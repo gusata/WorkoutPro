@@ -12,6 +12,8 @@ import { useWorkoutStore } from '@/stores/useWorkoutStore'
 import { useCardioStore } from '@/stores/useCardioStore'
 import { useHealthStore } from '@/stores/useHealthStore'
 import { ScoreRing } from '@/components/health/charts'
+import { HeartRateChip } from '@/components/health/HeartRateCard'
+import { useLiveHealth } from '@/components/health/useLiveHealth'
 import { computeReadiness } from '@/lib/readiness'
 import { cardioMinutesInWeek, DEFAULT_CARDIO_GOAL } from '@/lib/cardio'
 import { buttonClasses } from '@/components/ui/Button'
@@ -79,6 +81,9 @@ export default function Dashboard() {
   const healthSleep = useHealthStore((state) => state.sleep)
   const healthHrv = useHealthStore((state) => state.hrv)
   const healthRhr = useHealthStore((state) => state.restingHr)
+  const heartToday = useHealthStore((state) => state.heartToday)
+  const stepsToday = useHealthStore((state) => state.steps.find((day) => day.date.toDateString() === new Date().toDateString())?.value ?? null)
+  useLiveHealth()
   const [starting, setStarting] = useState(false)
   const [now] = useState(() => new Date())
 
@@ -240,6 +245,8 @@ export default function Dashboard() {
           <ChevronRight size={18} className="flex-none text-[var(--muted)]" aria-hidden />
         </Link>
       )}
+
+      <HeartRateChip today={heartToday} steps={stepsToday} />
 
       {deload.suggested && (
         <section className="tile mt-3" aria-labelledby="deload-title">

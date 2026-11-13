@@ -260,3 +260,87 @@ export async function readDailySteps(days = 14): Promise<DailyValue[]> {
     return []
   }
 }
+
+// ---------------------------------------------------------------------------
+// Heart rate (live)
+// ---------------------------------------------------------------------------
+
+export interface HeartPoint {
+  /** Start of a 5-minute bucket. */
+  time: Date
+  avg: number
+  min: number
+  max: number
+}
+
+export interface HeartToday {
+  latest: HeartSample | null
+  points: HeartPoint[]
+  min: number | null
+  max: number | null
+  avg: number | null
+}
+
+const BUCKET_MS = 5 * 60_000
+
+/** Heart rate since midnight, grouped into 5-minute buckets (keeps the cache small). */
+export async function readHeartToday(now: Date = new Date()): Promise<HeartToday> {
+  const start = new Date(now)
+  start.setHours(0, 0, 0, 0)
+  const samples = await heartRateSamples(start, now)
+  if (samples.length === 0) return { latest: null, points: [], min: null, max: null, avg: null }
+  const buckets = new Map<number, number[]>()
+  for (const sample of samples) {
+    const key = Math.floor(sample.time.getTime() / BUCKET_MS) * BUCKET_MS
+    buckets.set(key, [...(buckets.get(key) ?? []), sample.bpm])
+  }
+  const points = [...buckets.entries()].sort((a, b) => a[0] - b[0]).map(([key, values]) => ({
+    time: new Date(key),
+    avg: Math.round(values.reduce((a, b) => a + b, 0) / values.length),
+    min: Math.min(...values),
+    max: Math.max(...values),
+  }))
+  const bpms = samples.map((sample) => sample.bpm)
+  const latest = samples.reduce((newest, sample) => sample.time > newest.time ? sample : newest, samples[0])
+  return {
+    latest,
+    points,
+    min: Math.min(...bpms),
+    max: Math.max(...bpms),
+    avg: Math.round(bpms.reduce((a, b) => a + b, 0) / bpms.length),
+  }
+}
+
+export interface HeartDay {
+  date: Date
+  min: number
+  max: number
+  avg: number
+}
+
+/** Daily min / average / max for the last days, aggregated by Health Connect. */
+export async function readHeartDaily(days = 7): Promise<HeartDay[]> {
+  try {
+    const start = new Date()
+    start.setHours(0, 0, 0, 0)
+    start.setDate(start.getDate() - (days - 1))
+    const { samples } = await (await loadModule()).Health.queryAggregated({
+      dataType: 'heartRate', startDate: start.toISOString(), endDate: new Date().toISOString(), bucket: 'day', aggregation: ['min', 'average', 'max'],
+    })
+    return samples
+      .filter((sample) => sample.values.max != null)
+      .map((sample) => ({
+        date: new Date(sample.startDate),
+        min: Math.round(sample.values.min ?? sample.value),
+        max: Math.round(sample.values.max ?? sample.value),
+        avg: Math.round(sample.values.average ?? sample.value),
+      }))
+  } catch {
+    return []
+  }
+}
+
+export async function readStepsToday(): Promise<number | null> {
+  const days = await readDailySteps(1)
+  return days.at(-1)?.value ?? null
+}
