@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mesmos tokens de app/globals.css (tema claro). -->
+<resources>
+    <color name="wp_widget_background">#FFFFFF</color>
+    <color name="wp_widget_foreground">#1D1D1F</color>
+    <color name="wp_widget_muted">#6E6E73</color>
+    <color name="wp_widget_accent">#0066CC</color>
+    <color name="wp_widget_accent_fill">#0071E3</color>
+    <color name="wp_widget_on_accent">#FFFFFF</color>
+    <color name="wp_widget_fill">#F5F5F7</color>
+    <color name="wp_widget_streak">#FF9500</color>
+    <color name="wp_widget_heart">#FF3B30</color>
+</resources>

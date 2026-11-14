@@ -26,6 +26,7 @@ import { saveMedia } from '@/lib/media'
 import { renderShareCard, shareImage } from '@/lib/shareCard'
 import { averageHeartRate } from '@/lib/health'
 import { DEFAULT_BAR_WEIGHT } from '@/lib/preferences'
+import { buildLiveStatus } from '@/lib/liveStatus'
 import { formatDecimal, formatDuration, formatVolume } from '@/lib/utils'
 import { cn } from '@/lib/cn'
 import type { ActiveExercise, ActiveSession, ActiveSet, Exercise } from '@/types'
@@ -300,23 +301,8 @@ export default function ExecutePage() {
 
 /** Pushes "what now / what next" to the Android ongoing notification (lock screen). */
 function useLiveStatus(active: ActiveSession | null) {
-  const status = useMemo(() => {
-    if (!active) return null
-    const steps = active.exercises.flatMap((exercise) =>
-      exercise.sets.map((set, index) => ({ exercise, set, index }))
-    )
-    const pendingIndex = steps.findIndex((step) => !step.set.completed)
-    const describe = (step: (typeof steps)[number] | undefined) => step
-      ? `${step.exercise.exerciseName} · série ${step.index + 1} de ${step.exercise.sets.length} · ${formatDecimal(step.set.weight)} kg × ${step.set.reps}`
-      : 'Último passo: finalizar o treino'
-    return {
-      workoutName: active.workoutName,
-      current: pendingIndex < 0 ? 'Tudo feito. Finalize o treino.' : describe(steps[pendingIndex]),
-      next: pendingIndex < 0 ? 'Finalizar o treino' : describe(steps[pendingIndex]),
-      doneSets: steps.filter((step) => step.set.completed).length,
-      totalSets: steps.length,
-    }
-  }, [active])
+  // Includes the pending sets, so the notification's "Série feita" works with the app in background.
+  const status = useMemo(() => buildLiveStatus(active), [active])
   const key = status ? JSON.stringify(status) : ''
 
   useEffect(() => {

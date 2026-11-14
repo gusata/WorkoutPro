@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_label">Treino de hoje</string>
+    <string name="widget_description">Treino planejado, sequência, frequência cardíaca e o timer do treino em andamento.</string>
+    <!-- Textos de exemplo da pré-visualização; substituídos pelos dados reais. -->
+    <string name="widget_sample_eyebrow">Hoje</string>
+    <string name="widget_sample_title">Treino A · Peito</string>
+    <string name="widget_sample_subtitle">Planejado para hoje</string>
+    <string name="widget_sample_streak">5 dias</string>
+    <string name="widget_sample_heart">72 bpm</string>
+    <string name="widget_sample_heart_time">às 14:32</string>
+    <string name="widget_sample_action">Iniciar</string>
+    <string name="widget_streak_label">Sequência</string>
+    <string name="widget_heart_label">Frequência cardíaca</string>
+
+    <string name="shortcut_start_short">Treino de hoje</string>
+    <string name="shortcut_start_long">Iniciar treino de hoje</string>
+    <string name="shortcut_cardio_short">Cardio</string>
+    <string name="shortcut_cardio_long">Registrar cardio</string>
+    <string name="shortcut_progress_short">Progresso</string>
+    <string name="shortcut_progress_long">Ver progresso</string>
+    <string name="shortcut_disabled">Atalho indisponível</string>
+</resources>

@@ -55,7 +55,7 @@ describe('muscleVolumeInRange', () => {
     const volume = muscleVolumeInRange(sessions, [benchWithSecondaries], new Date('2026-08-17T00:00:00-03:00'), WED)
     expect(volume.get('Peitoral')?.sets).toBe(5)
     expect(volume.get('Tríceps')?.sets).toBe(2.5)
-    expect(volume.get('Tríceps')?.exercises[0]).toMatchObject({ name: 'Supino', sets: 5, credited: 2.5, primary: false })
+    expect(volume.get('Tríceps')?.exercises[0]).toMatchObject({ name: 'Empurrar teste', sets: 5, credited: 2.5, primary: false })
     expect(volume.has('Costas')).toBe(false)
   })
 })

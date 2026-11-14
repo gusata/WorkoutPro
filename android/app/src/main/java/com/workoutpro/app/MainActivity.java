@@ -8,6 +8,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(android.os.Bundle savedInstanceState) {
         registerPlugin(TimerPlugin.class);
         registerPlugin(HealthChangesPlugin.class);
+        registerPlugin(WidgetPlugin.class);
         super.onCreate(savedInstanceState);
 
         if (getBridge() != null && getBridge().getWebView() != null) {

@@ -79,7 +79,30 @@
 
                 <data android:scheme="workoutpro" android:host="auth" android:path="/callback" />
             </intent-filter>
+
+            <!-- Widget, atalhos e notificacoes: workoutpro://open/... (roteado em lib/deepLinks.ts). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="workoutpro" android:host="open" />
+            </intent-filter>
+
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
+
+        <!-- Widget da tela inicial: treino de hoje, sequencia, frequencia cardiaca e timer. -->
+        <receiver
+            android:name=".WorkoutWidgetProvider"
+            android:label="@string/widget_label"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_workout_info" />
+        </receiver>
+
+        <!-- Aviso de fim do descanso iniciado pelos botoes da notificacao. -->
+        <receiver android:name=".RestAlarmReceiver" android:exported="false" />
 
         <!-- O timer nao usa sensores de saude; specialUse evita solicitar permissoes enganosas. -->
         <service

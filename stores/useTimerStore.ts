@@ -17,6 +17,11 @@ interface TimerStore {
   /** Adds (or removes, when negative) time to the running rest without restarting it. */
   extendRest: (seconds: number) => void
   stopRest: () => void
+  /**
+   * Mirrors a rest changed by a notification button (already applied natively, which also
+   * owns its end alert): updates the state without calling the native timer again.
+   */
+  syncRestFromNative: (endAt: number | null, total?: number) => void
   tickWorkout: () => void
   tickRest: () => void
 }
@@ -126,6 +131,26 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
   stopRest: () => {
     set({ restRunning: false, restSeconds: 0, restEndAt: null })
     fireCancelRest()
+  },
+
+  syncRestFromNative: (endAt, total) => {
+    // The native service alerts at the (new) end; a previously scheduled JS alert would be stale.
+    if (typeof window !== 'undefined') {
+      import('@/lib/notifications')
+        .then(({ cancelRestNotification }) => cancelRestNotification())
+        .catch(() => undefined)
+    }
+    const remaining = endAt == null ? 0 : Math.ceil((endAt - Date.now()) / 1000)
+    if (endAt == null || remaining <= 0) {
+      set({ restRunning: false, restSeconds: 0, restEndAt: null })
+      return
+    }
+    set((state) => ({
+      restRunning: true,
+      restEndAt: endAt,
+      restSeconds: remaining,
+      restTotal: Math.max(remaining, total ?? state.restTotal),
+    }))
   },
 
   // Use wall-clock so the timer stays accurate after backgrounding.
