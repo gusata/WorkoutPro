@@ -225,7 +225,18 @@ function parsePreferences(value: unknown): UserPreferences {
     reminders: reminders ? { enabled: reminders.enabled === true, timeOfDay: isFiniteNumber(reminders.timeOfDay) ? reminders.timeOfDay : null } : undefined,
     healthSync: value.healthSync === true,
     barWeight: isFiniteNumber(value.barWeight) ? value.barWeight : undefined,
+    muscleTargets: parseMuscleTargets(value.muscleTargets),
   }
+}
+
+function parseMuscleTargets(value: unknown): UserPreferences['muscleTargets'] {
+  if (!isRecord(value)) return undefined
+  const result: NonNullable<UserPreferences['muscleTargets']> = {}
+  for (const [muscle, range] of Object.entries(value)) {
+    if (!(MUSCLE_GROUPS as readonly string[]).includes(muscle) || !isRecord(range) || !isFiniteNumber(range.min) || !isFiniteNumber(range.max) || range.min < 0 || range.max < range.min) continue
+    result[muscle as keyof typeof result] = { min: range.min, max: range.max }
+  }
+  return result
 }
 
 function parseTrainingBlock(value: unknown): TrainingBlock | null {

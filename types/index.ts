@@ -143,6 +143,14 @@ export interface UserPreferences {
   birthYear?: number | null
   /** Measured maximum heart rate; overrides the age-based estimate. */
   maxHeartRate?: number | null
+  /** Weekly hard-set target range per muscle; missing muscles use the defaults. */
+  muscleTargets?: Partial<Record<MuscleGroup, MuscleTargetRange>>
+}
+
+/** Weekly hard working sets considered productive for a muscle. */
+export interface MuscleTargetRange {
+  min: number
+  max: number
 }
 
 export type CardioActivity =

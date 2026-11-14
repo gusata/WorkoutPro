@@ -17,6 +17,7 @@ import { healthPlatformName, latestRestingHeartRate } from '@/lib/health'
 import { useHealthConnect } from '@/components/health/useHealthConnect'
 import { DEFAULT_CARDIO_GOAL, maxHeartRate, zoneRanges } from '@/lib/cardio'
 import { DecimalInput } from '@/components/ui/DecimalInput'
+import { MuscleTargetsSettings } from '@/components/insights/MuscleTargetsSettings'
 import type { ThemePreference } from '@/lib/theme'
 import type { WeeklyGoals } from '@/types'
 
@@ -241,6 +242,8 @@ export default function SettingsPage() {
         </div>
         <p className="list-footer">Equipamentos disponíveis personalizam as sugestões de exercícios.</p>
       </section>
+
+      <MuscleTargetsSettings />
 
       <section aria-labelledby="appearance-title" className="stack-section">
         <h2 id="appearance-title" className="list-header">Aparência</h2>
