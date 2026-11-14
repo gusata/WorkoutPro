@@ -2,13 +2,68 @@ package com.workoutpro.app;
 
 import android.content.Intent;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.Log;
+import com.getcapacitor.JSArray;
+import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import java.lang.ref.WeakReference;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 @CapacitorPlugin(name = "TimerPlugin")
 public class TimerPlugin extends Plugin {
+    private static final String TAG = "WorkoutProTimerPlugin";
+    /** Fired for every notification button handled by the service (JS then drains the queue). */
+    static final String EVENT_NOTIFICATION_ACTION = "notificationAction";
+
+    private static volatile WeakReference<TimerPlugin> current = new WeakReference<>(null);
+
+    @Override
+    public void load() {
+        current = new WeakReference<>(this);
+    }
+
+    /** Wakes the web layer up after a notification button; a no-op when the app UI isn't alive. */
+    static void emitNotificationAction(JSONObject action) {
+        TimerPlugin plugin = current.get();
+        if (plugin == null) return;
+        new Handler(Looper.getMainLooper()).post(() -> {
+            try {
+                plugin.notifyListeners(EVENT_NOTIFICATION_ACTION, JSObject.fromJSONObject(action));
+            } catch (Exception error) {
+                Log.w(TAG, "Falha ao avisar o app sobre a acao da notificacao", error);
+            }
+        });
+    }
+
+    @Override
+    protected void handleOnResume() {
+        super.handleOnResume();
+        // Actions tapped while the WebView was paused: ask JS to drain the queue now.
+        if (NativeStore.pendingCount(getContext()) > 0) {
+            JSObject data = new JSObject();
+            data.put("type", "pending");
+            notifyListeners(EVENT_NOTIFICATION_ACTION, data);
+        }
+    }
+
+    /** Returns and clears the notification actions the web layer has not applied yet. */
+    @PluginMethod
+    public void consumePendingActions(PluginCall call) {
+        try {
+            JSONArray actions = NativeStore.drainActions(getContext());
+            JSObject result = new JSObject();
+            result.put("actions", new JSArray(actions.toString()));
+            call.resolve(result);
+        } catch (Exception error) {
+            call.reject("Nao foi possivel ler as acoes da notificacao", error);
+        }
+    }
 
     @PluginMethod
     public void startWorkout(PluginCall call) {
@@ -68,6 +123,8 @@ public class TimerPlugin extends Plugin {
             intent.putExtra(TimerForegroundService.EXTRA_NEXT, call.getString("next", ""));
             intent.putExtra(TimerForegroundService.EXTRA_DONE_SETS, call.getInt("doneSets", 0));
             intent.putExtra(TimerForegroundService.EXTRA_TOTAL_SETS, call.getInt("totalSets", 0));
+            JSArray pending = call.getArray("pending", null);
+            if (pending != null) intent.putExtra(TimerForegroundService.EXTRA_PENDING_JSON, pending.toString());
             // Plain startService: the service is already in the foreground while a workout runs.
             getContext().startService(intent);
         } catch (Exception error) {
