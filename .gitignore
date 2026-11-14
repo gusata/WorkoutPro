@@ -46,3 +46,6 @@ next-env.d.ts
 
 # android
 android/local.properties
+
+# claude code agent worktrees
+/.claude/worktrees/
