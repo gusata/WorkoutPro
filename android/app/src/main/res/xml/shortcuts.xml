@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Atalhos do ícone do app. Os links workoutpro://open/... são roteados em lib/deepLinks.ts. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="start_today"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_start"
+        android:shortcutShortLabel="@string/shortcut_start_short"
+        android:shortcutLongLabel="@string/shortcut_start_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="workoutpro://open/start"
+            android:targetPackage="com.workoutpro.app"
+            android:targetClass="com.workoutpro.app.MainActivity" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="log_cardio"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_cardio"
+        android:shortcutShortLabel="@string/shortcut_cardio_short"
+        android:shortcutLongLabel="@string/shortcut_cardio_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="workoutpro://open/cardio?novo=1"
+            android:targetPackage="com.workoutpro.app"
+            android:targetClass="com.workoutpro.app.MainActivity" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="progress"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_progress"
+        android:shortcutShortLabel="@string/shortcut_progress_short"
+        android:shortcutLongLabel="@string/shortcut_progress_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="workoutpro://open/progress"
+            android:targetPackage="com.workoutpro.app"
+            android:targetClass="com.workoutpro.app.MainActivity" />
+    </shortcut>
+</shortcuts>

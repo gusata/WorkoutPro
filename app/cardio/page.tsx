@@ -11,6 +11,7 @@ import { MiniBars } from '@/components/health/charts'
 import { CardioDetail, CardioForm } from '@/components/health/CardioSheets'
 import { useCardioStore } from '@/stores/useCardioStore'
 import { useProfileStore } from '@/stores/useProfileStore'
+import { useCardioNewLink } from '@/components/layout/useCardioNewLink'
 import { cardioLabel, DEFAULT_CARDIO_GOAL, formatDistance, formatMinutes, formatPace, maxHeartRate, ZONES } from '@/lib/cardio'
 import type { CardioSession } from '@/types'
 
@@ -21,6 +22,7 @@ export default function CardioPage() {
   const [editing, setEditing] = useState<CardioSession | null>(null)
   const [selected, setSelected] = useState<CardioSession | null>(null)
   const [now] = useState(() => new Date())
+  useCardioNewLink(() => { setEditing(null); setFormOpen(true) })
   const goal = preferences?.weeklyGoals?.cardioMinutes ?? DEFAULT_CARDIO_GOAL
   const maxHr = maxHeartRate(preferences)
 
