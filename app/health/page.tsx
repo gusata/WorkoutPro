@@ -11,7 +11,6 @@ import { LineChart } from '@/components/insights/LineChart'
 import { Hypnogram, MiniBars, ScoreRing, StageLegend, formatHm } from '@/components/health/charts'
 import { CardioDetail, CardioForm } from '@/components/health/CardioSheets'
 import { useHealthConnect } from '@/components/health/useHealthConnect'
-import { useLiveHealth } from '@/components/health/useLiveHealth'
 import { HeartRateCard } from '@/components/health/HeartRateCard'
 import { useHealthStore } from '@/stores/useHealthStore'
 import { useCardioStore } from '@/stores/useCardioStore'
@@ -32,7 +31,6 @@ export default function HealthPage() {
   const [editing, setEditing] = useState<CardioSession | null>(null)
   const [selected, setSelected] = useState<CardioSession | null>(null)
   const [now] = useState(() => new Date())
-  useLiveHealth()
 
   const lastNight = health.sleep.at(-1) ?? null
   const recentSets = useMemo(() => sessions
@@ -95,7 +93,7 @@ export default function HealthPage() {
       {connected && (
         <div className="mt-4 flex items-center justify-between px-1">
           <p className="footnote text-[var(--muted)]">
-            {health.status === 'loading' ? 'Atualizando...' : (health.lastLive ?? health.lastRefreshed) ? `Atualizado ${formatDistanceToNow(Math.max(health.lastLive ?? 0, health.lastRefreshed ?? 0), { locale: ptBR, addSuffix: true })} · automático a cada minuto` : 'Ainda não atualizado'}
+            {health.status === 'loading' ? 'Atualizando...' : (health.lastLive ?? health.lastRefreshed) ? `Atualizado ${formatDistanceToNow(Math.max(health.lastLive ?? 0, health.lastRefreshed ?? 0), { locale: ptBR, addSuffix: true })} · automático` : 'Ainda não atualizado'}
           </p>
           <button type="button" onClick={refresh} disabled={health.status === 'loading'} className="link text-[15px] disabled:opacity-40">
             <RefreshCw size={14} className={health.status === 'loading' ? 'animate-spin' : ''} aria-hidden />Atualizar

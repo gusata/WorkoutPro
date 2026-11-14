@@ -2,22 +2,29 @@
 
 import { useEffect } from 'react'
 import { useProfileStore } from '@/stores/useProfileStore'
-import { useHealthStore } from '@/stores/useHealthStore'
+import { CHANGES_INTERVAL_MS, useHealthStore } from '@/stores/useHealthStore'
 
-/** Refreshes health data on start and when the app returns to the foreground (throttled in the store). */
+/**
+ * Keeps health data current while the app is open: asks Health Connect what changed
+ * on start, when the app returns to the foreground and every few seconds while it is
+ * visible. A check with no news is a single cheap local call (see HealthChangesPlugin).
+ */
 export function HealthSync() {
   const loaded = useProfileStore((state) => state.loaded)
   const healthSync = useProfileStore((state) => state.profile?.preferences?.healthSync ?? false)
 
   useEffect(() => {
     if (!loaded || !healthSync) return
-    const run = () => { void useHealthStore.getState().refresh() }
-    const timer = setTimeout(run, 1200)
-    const onVisible = () => { if (document.visibilityState === 'visible') run() }
-    document.addEventListener('visibilitychange', onVisible)
+    const check = () => {
+      if (document.visibilityState === 'visible') void useHealthStore.getState().checkChanges()
+    }
+    const first = setTimeout(check, 1200)
+    const timer = setInterval(check, CHANGES_INTERVAL_MS)
+    document.addEventListener('visibilitychange', check)
     return () => {
-      clearTimeout(timer)
-      document.removeEventListener('visibilitychange', onVisible)
+      clearTimeout(first)
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', check)
     }
   }, [healthSync, loaded])
 

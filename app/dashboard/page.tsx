@@ -13,7 +13,6 @@ import { useCardioStore } from '@/stores/useCardioStore'
 import { useHealthStore } from '@/stores/useHealthStore'
 import { ScoreRing } from '@/components/health/charts'
 import { HeartRateChip } from '@/components/health/HeartRateCard'
-import { useLiveHealth } from '@/components/health/useLiveHealth'
 import { computeReadiness } from '@/lib/readiness'
 import { cardioMinutesInWeek, DEFAULT_CARDIO_GOAL } from '@/lib/cardio'
 import { buttonClasses } from '@/components/ui/Button'
@@ -83,7 +82,6 @@ export default function Dashboard() {
   const healthRhr = useHealthStore((state) => state.restingHr)
   const heartToday = useHealthStore((state) => state.heartToday)
   const stepsToday = useHealthStore((state) => state.steps.find((day) => day.date.toDateString() === new Date().toDateString())?.value ?? null)
-  useLiveHealth()
   const [starting, setStarting] = useState(false)
   const [now] = useState(() => new Date())
 

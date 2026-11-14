@@ -23,15 +23,39 @@ interface HealthState {
   lastRefreshed: number | null
   lastLive: number | null
   refresh: (options?: { force?: boolean }) => Promise<{ imported: number } | null>
-  /** Cheap update of today's heart rate and steps, for screens that stay open. */
-  refreshLive: () => Promise<void>
+  /** Cheap update of today's heart rate and/or steps. */
+  refreshLive: (what?: { heart?: boolean; steps?: boolean }) => Promise<void>
+  /**
+   * Asks Health Connect what changed since the last check and reads only that.
+   * Safe to call every few seconds; without the Changes API (web, iOS) it falls
+   * back to throttled polling.
+   */
+  checkChanges: () => Promise<void>
 }
 
-/** Full refresh when the app opens or returns to the foreground. */
-const MIN_INTERVAL_MS = 60_000
-/** Heart rate + steps while a health screen is open. */
-export const LIVE_INTERVAL_MS = 60_000
+/** Full re-read when nothing tells us what changed (fallback without the Changes API). */
+const MIN_INTERVAL_MS = 15 * 60_000
+/** Even with the Changes API, re-read everything now and then (e.g. day rollover). */
+const SAFETY_INTERVAL_MS = 6 * 60 * 60_000
+/** How often the open app asks Health Connect for changes. */
+export const CHANGES_INTERVAL_MS = 10_000
+/** Fallback polling of heart rate + steps without the Changes API. */
+const LIVE_INTERVAL_MS = 60_000
+const LIVE_TYPES = new Set(['heartRate', 'steps'])
 let running: Promise<{ imported: number } | null> | null = null
+let checking = false
+
+function startOfToday() {
+  return new Date(new Date().setHours(0, 0, 0, 0))
+}
+
+/** Today's row in the 7-day list follows the live reading instead of waiting for a full refresh. */
+function withToday(days: HeartDay[], today: HeartToday | null): HeartDay[] {
+  if (today?.min == null || today.max == null || today.avg == null) return days
+  const date = startOfToday()
+  return [...days.filter((day) => day.date.toDateString() !== date.toDateString()), { date, min: today.min, max: today.max, avg: today.avg }]
+    .sort((a, b) => a.date.getTime() - b.date.getTime())
+}
 
 function reviveHeartToday(value: HeartToday | null | undefined): HeartToday | null {
   if (!value) return null
@@ -50,8 +74,8 @@ function reviveSeries(items: DailyValue[] | undefined) {
 
 /**
  * Cached readings from Health Connect / Apple Health. Kept in localStorage so the
- * Saúde tab opens instantly (and offline). Full refresh at most once a minute when the
- * app opens or returns to the foreground; open health screens poll heart rate and steps.
+ * Saúde tab opens instantly (and offline). On Android the open app checks the Health
+ * Connect Changes API every few seconds and reads only the data that changed.
  */
 export const useHealthStore = create<HealthState>()(
   persist(
@@ -109,22 +133,65 @@ export const useHealthStore = create<HealthState>()(
         return running
       },
 
-      refreshLive: async () => {
+      refreshLive: async ({ heart = true, steps = true } = {}) => {
         if (running) return
         if (!useProfileStore.getState().profile?.preferences?.healthSync) return
         try {
           const health = await import('@/lib/health')
-          const [heartToday, stepsToday] = await Promise.all([health.readHeartToday(), health.readStepsToday()])
+          const [heartToday, stepsToday] = await Promise.all([
+            heart ? health.readHeartToday(new Date(), get().heartToday) : Promise.resolve(undefined),
+            steps ? health.readStepsToday() : Promise.resolve(undefined),
+          ])
           set((state) => {
             const today = new Date().toDateString()
-            const steps = stepsToday == null ? state.steps : [
+            const nextSteps = stepsToday == null ? state.steps : [
               ...state.steps.filter((day) => day.date.toDateString() !== today),
-              { date: new Date(new Date().setHours(0, 0, 0, 0)), value: stepsToday },
+              { date: startOfToday(), value: stepsToday },
             ].sort((a, b) => a.date.getTime() - b.date.getTime())
-            return { heartToday, steps, lastLive: Date.now() }
+            const nextHeart = heartToday === undefined ? state.heartToday : heartToday
+            return {
+              heartToday: nextHeart,
+              heartDaily: heartToday === undefined ? state.heartDaily : withToday(state.heartDaily, nextHeart),
+              steps: nextSteps,
+              lastLive: Date.now(),
+            }
           })
         } catch {
           // Next tick tries again; the cached values stay on screen.
+        }
+      },
+
+      checkChanges: async () => {
+        if (running || checking) return
+        if (!useProfileStore.getState().profile?.preferences?.healthSync) return
+        checking = true
+        try {
+          const { checkHealthChanges } = await import('@/lib/healthChanges')
+          const result = await checkHealthChanges()
+          if (result === null) {
+            // No Changes API here: plain throttled polling.
+            await get().refresh()
+            const lastLive = get().lastLive
+            if (!lastLive || Date.now() - lastLive >= LIVE_INTERVAL_MS) await get().refreshLive()
+            return
+          }
+          if (!result.available) {
+            await get().refresh()
+            return
+          }
+          const changed = result.changed ?? []
+          const lastRefreshed = get().lastRefreshed
+          const stale = !lastRefreshed || Date.now() - lastRefreshed >= SAFETY_INTERVAL_MS
+          // Sleep, workouts, trends or deletions are rare: re-read everything for those.
+          if (result.reset || stale || changed.some((type) => !LIVE_TYPES.has(type))) {
+            await get().refresh({ force: true })
+          } else if (changed.length > 0) {
+            await get().refreshLive({ heart: changed.includes('heartRate'), steps: changed.includes('steps') })
+          }
+        } catch {
+          // Health Connect busy or permission revoked mid-check: the next tick retries.
+        } finally {
+          checking = false
         }
       },
     }),

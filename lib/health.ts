@@ -271,6 +271,8 @@ export interface HeartPoint {
   avg: number
   min: number
   max: number
+  /** Samples in the bucket, so buckets can be merged without re-reading them. */
+  count?: number
 }
 
 export interface HeartToday {
@@ -282,33 +284,64 @@ export interface HeartToday {
 }
 
 const BUCKET_MS = 5 * 60_000
+const EMPTY_HEART: HeartToday = { latest: null, points: [], min: null, max: null, avg: null }
 
-/** Heart rate since midnight, grouped into 5-minute buckets (keeps the cache small). */
-export async function readHeartToday(now: Date = new Date()): Promise<HeartToday> {
-  const start = new Date(now)
-  start.setHours(0, 0, 0, 0)
-  const samples = await heartRateSamples(start, now)
-  if (samples.length === 0) return { latest: null, points: [], min: null, max: null, avg: null }
+function bucketize(samples: HeartSample[]): HeartPoint[] {
   const buckets = new Map<number, number[]>()
   for (const sample of samples) {
     const key = Math.floor(sample.time.getTime() / BUCKET_MS) * BUCKET_MS
-    buckets.set(key, [...(buckets.get(key) ?? []), sample.bpm])
+    const values = buckets.get(key)
+    if (values) values.push(sample.bpm)
+    else buckets.set(key, [sample.bpm])
   }
-  const points = [...buckets.entries()].sort((a, b) => a[0] - b[0]).map(([key, values]) => ({
+  return [...buckets.entries()].sort((a, b) => a[0] - b[0]).map(([key, values]) => ({
     time: new Date(key),
     avg: Math.round(values.reduce((a, b) => a + b, 0) / values.length),
     min: Math.min(...values),
     max: Math.max(...values),
+    count: values.length,
   }))
-  const bpms = samples.map((sample) => sample.bpm)
-  const latest = samples.reduce((newest, sample) => sample.time > newest.time ? sample : newest, samples[0])
+}
+
+function summarize(points: HeartPoint[], latest: HeartSample | null): HeartToday {
+  if (points.length === 0) return EMPTY_HEART
+  const total = points.reduce((sum, point) => sum + (point.count ?? 1), 0)
   return {
     latest,
     points,
-    min: Math.min(...bpms),
-    max: Math.max(...bpms),
-    avg: Math.round(bpms.reduce((a, b) => a + b, 0) / bpms.length),
+    min: Math.min(...points.map((point) => point.min)),
+    max: Math.max(...points.map((point) => point.max)),
+    avg: Math.round(points.reduce((sum, point) => sum + point.avg * (point.count ?? 1), 0) / total),
   }
+}
+
+function newest(samples: HeartSample[]): HeartSample | null {
+  return samples.reduce<HeartSample | null>((best, sample) => !best || sample.time > best.time ? sample : best, null)
+}
+
+/**
+ * Heart rate since midnight, grouped into 5-minute buckets (keeps the cache small).
+ * With `previous` from the same day, only the last bucket onwards is read again and
+ * merged, so frequent updates stay cheap even on days with a lot of watch data.
+ */
+export async function readHeartToday(now: Date = new Date(), previous?: HeartToday | null): Promise<HeartToday> {
+  const start = new Date(now)
+  start.setHours(0, 0, 0, 0)
+  const last = previous?.points.at(-1)
+  const incremental = last && last.time >= start && previous!.points.every((point) => point.count != null)
+
+  if (incremental) {
+    const from = last.time
+    const samples = (await heartRateSamples(from, now)).filter((sample) => sample.time >= from)
+    if (samples.length === 0) return previous!
+    const points = [...previous!.points.filter((point) => point.time < from), ...bucketize(samples)]
+    const fresh = newest(samples)
+    const latest = previous!.latest && fresh && previous!.latest.time > fresh.time ? previous!.latest : fresh
+    return summarize(points, latest)
+  }
+
+  const samples = await heartRateSamples(start, now)
+  return summarize(bucketize(samples), newest(samples))
 }
 
 export interface HeartDay {
