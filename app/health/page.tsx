@@ -83,7 +83,7 @@ export default function HealthPage() {
 
       {connect.healthSync && health.missing.length > 0 && connect.availability?.available && (
         <section className="tile tile-compact mt-6 flex items-center gap-4" aria-label="Permissões">
-          <p className="subhead flex-1">Faltam permissões para ler {health.missing.length} tipo{health.missing.length > 1 ? 's' : ''} de dado (como sono e treinos).</p>
+          <p className="subhead flex-1">Faltam permissões para {health.missing.length} tipo{health.missing.length > 1 ? 's' : ''} de dado (como sono, treinos ou gravar seus treinos).</p>
           <Button size="sm" onClick={connect.connect} disabled={connect.busy}>Permitir</Button>
         </section>
       )}

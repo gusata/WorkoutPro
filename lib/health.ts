@@ -47,16 +47,62 @@ export async function healthAvailable(): Promise<{ available: boolean; reason?: 
 export async function connectHealth(): Promise<boolean> {
   // History access lets trends (resting HR, HRV, VO2 max) look back further than 30 days.
   const status = await (await loadModule()).Health.requestAuthorization({ read: [...READ_TYPES], write: [...WRITE_TYPES], requestHistoryAccess: true })
-  return status.readAuthorized.length > 0 || status.writeAuthorized.length > 0
+  const granted = status.readAuthorized.length > 0 || status.writeAuthorized.length > 0
+  // Writing strength sessions needs permissions the plugin above does not know (Android only).
+  if (granted) {
+    const { requestHealthWritePermissions } = await import('@/lib/healthChanges')
+    await requestHealthWritePermissions().catch(() => null)
+  }
+  return granted
 }
 
 /** Data types the user has not granted yet (without prompting). */
 export async function missingHealthPermissions(): Promise<string[]> {
   try {
     const status = await (await loadModule()).Health.checkAuthorization({ read: [...READ_TYPES], write: [...WRITE_TYPES] })
-    return [...status.readDenied, ...status.writeDenied]
+    const { healthWriteStatus } = await import('@/lib/healthChanges')
+    const writes = await healthWriteStatus().catch(() => null)
+    const sessionWrites = writes?.available
+      ? [...(writes.exercise ? [] : ['exerciseWrite']), ...(writes.calories ? [] : ['caloriesWrite'])]
+      : []
+    return [...status.readDenied, ...status.writeDenied, ...sessionWrites]
   } catch {
     return [...READ_TYPES]
+  }
+}
+
+/** Android package / iOS bundle id of this app: records it wrote itself. */
+export const OWN_HEALTH_SOURCE = 'com.workoutpro.app'
+
+export interface StrengthSessionExport {
+  id: string
+  title: string
+  startedAt: Date
+  finishedAt: Date
+  notes?: string
+  activeCalories?: number | null
+}
+
+/**
+ * Mirrors a finished strength session to Health Connect (ExerciseSessionRecord + active
+ * calories). Idempotent: the session id is the record's clientRecordId. Never throws.
+ */
+export async function writeStrengthSession(session: StrengthSessionExport): Promise<boolean> {
+  try {
+    if (session.finishedAt.getTime() - session.startedAt.getTime() < 60_000) return false
+    const { writeExerciseSession } = await import('@/lib/healthChanges')
+    const result = await writeExerciseSession({
+      clientRecordId: `workoutpro-session-${session.id}`,
+      title: session.title,
+      notes: session.notes || undefined,
+      startTime: session.startedAt.toISOString(),
+      endTime: session.finishedAt.toISOString(),
+      exerciseType: 'strength',
+      activeCalories: session.activeCalories ?? null,
+    })
+    return result?.written ?? false
+  } catch {
+    return false
   }
 }
 
@@ -131,6 +177,8 @@ export interface HealthWorkout {
   distance: number | null
   calories: number | null
   sourceName: string | null
+  /** Package / bundle id that recorded it. */
+  sourceId?: string | null
 }
 
 const DAY = 86_400_000
@@ -153,6 +201,7 @@ export async function readWorkouts(days = 30): Promise<HealthWorkout[]> {
         distance: workout.totalDistance ?? null,
         calories: workout.totalEnergyBurned != null ? Math.round(workout.totalEnergyBurned) : null,
         sourceName: workout.sourceName ?? null,
+        sourceId: workout.sourceId ?? null,
       })
     }
     anchor = response.anchor || undefined

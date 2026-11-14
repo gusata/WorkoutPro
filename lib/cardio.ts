@@ -31,6 +31,14 @@ const STRENGTH_TYPES = new Set([
   'meditation', 'guidedBreathing', 'cooldown', 'preparationAndRecovery', 'other',
 ])
 
+/**
+ * Workouts this app wrote to the health store itself (strength sessions mirrored on
+ * finish): never import them back. Matched by data origin (package / bundle id).
+ */
+export function isOwnHealthWorkout(workout: { sourceId?: string | null }, ownSource = 'com.workoutpro.app') {
+  return workout.sourceId === ownSource
+}
+
 /** Maps a Health Connect / HealthKit workout type to a cardio activity, or null when it isn't cardio. */
 export function activityFromHealthType(type: string): CardioActivity | null {
   if (STRENGTH_TYPES.has(type)) return null

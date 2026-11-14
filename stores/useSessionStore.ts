@@ -67,6 +67,37 @@ function createDebouncedStorage<S>(delay = 400): PersistStorage<S> {
   }
 }
 
+/** Text for the Health Connect session: exercises with their completed sets, then the notes. */
+export function healthSessionNotes(active: Pick<ActiveSession, 'exercises' | 'notes'>, totalVolume: number) {
+  const lines = active.exercises
+    .map((exercise) => ({ name: exercise.exerciseName, sets: exercise.sets.filter((item) => item.completed).length }))
+    .filter((item) => item.sets > 0)
+    .map((item) => `${item.name}: ${item.sets} ${item.sets === 1 ? 'série' : 'séries'}`)
+  if (totalVolume > 0) lines.push(`Volume: ${Math.round(totalVolume)} kg`)
+  if (active.notes?.trim()) lines.push(active.notes.trim())
+  return lines.join('\n')
+}
+
+/**
+ * Mirrors the finished session to Health Connect when sync is on. Fire-and-forget:
+ * the write is idempotent (session id as clientRecordId) and failures stay silent.
+ */
+function exportToHealth(active: ActiveSession, session: WorkoutSession) {
+  const profileState = useProfileStore.getState()
+  if (!profileState.profile?.preferences?.healthSync || !session.finishedAt) return
+  const bodyWeight = profileState.measurements.find((item) => item.weight != null)?.weight ?? null
+  void Promise.all([import('@/lib/health'), import('@/lib/liveHeart')]).then(([health, live]) =>
+    health.writeStrengthSession({
+      id: session.id,
+      title: active.workoutName,
+      startedAt: new Date(session.startedAt),
+      finishedAt: new Date(session.finishedAt!),
+      notes: healthSessionNotes(active, session.totalVolume),
+      activeCalories: live.estimateStrengthCalories(session.duration, bodyWeight),
+    })
+  ).catch(() => undefined)
+}
+
 interface SessionStore {
   active: ActiveSession | null
   startSession: (workout: Workout, exercises: Exercise[]) => Promise<void>
@@ -241,6 +272,7 @@ export const useSessionStore = create<SessionStore>()(
 
         set((state) => state.active?.sessionId === sessionId ? { active: null } : state)
         useTimerStore.getState().resetWorkoutTimer()
+        exportToHealth(active, persisted)
         return { ...persisted, newPrs }
       },
 
