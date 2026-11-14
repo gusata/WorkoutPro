@@ -1,0 +1,6 @@
+# One back press closes the shade (a second one would navigate back inside the app).
+appId: com.workoutpro.app
+---
+- pressKey: back
+- waitForAnimationToEnd:
+    timeout: 2000

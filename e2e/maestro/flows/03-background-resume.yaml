@@ -1,0 +1,109 @@
+appId: com.workoutpro.app
+# Workout - background, resume and process restart keep the session and timers
+name: 03-background-resume
+tags:
+  - device
+  - timer
+  - lifecycle
+env:
+  ROUTINE: Rotina E2E Fundo
+---
+- runFlow: ../common/launch-clean.yaml
+- runFlow:
+    file: ../common/create-routine.yaml
+    env:
+      ROUTINE_NAME: ${ROUTINE}
+- runFlow: ../common/start-routine.yaml
+
+# --- Home -> 20 s in background: the workout clock keeps running (service + web clock) ---
+- copyTextFrom: "Tempo de treino .*"
+- runScript:
+    file: ../scripts/duration.js
+    env:
+      KEY: clockBefore
+- pressKey: home
+- runFlow:
+    file: ../common/wait.yaml
+    env:
+      WAIT_MS: "20000"
+- runFlow: ../common/open-notifications.yaml
+- extendedWaitUntil:
+    visible: "${ROUTINE} · \\d{2}:\\d{2}"
+    timeout: 10000
+- runFlow: ../common/close-notifications.yaml
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible: "Concluir série 1"
+    timeout: 10000
+- copyTextFrom: "Tempo de treino .*"
+- runScript:
+    file: ../scripts/duration.js
+    env:
+      KEY: clockAfter
+- assertTrue:
+    condition: ${output.clockAfter >= output.clockBefore + 15}
+    label: "Workout clock advanced while in background (${output.clockBefore}s -> ${output.clockAfter}s)"
+
+# --- A running rest survives backgrounding and keeps counting down ---
+- runFlow:
+    file: ../common/complete-set.yaml
+    env:
+      SET: "1"
+      WEIGHT: "30"
+      REPS: "12"
+- copyTextFrom: "Descanso restante .*"
+- runScript:
+    file: ../scripts/duration.js
+    env:
+      KEY: restBefore
+- pressKey: home
+- runFlow:
+    file: ../common/wait.yaml
+    env:
+      WAIT_MS: "8000"
+- launchApp:
+    stopApp: false
+- assertVisible: "Pular"
+- copyTextFrom: "Descanso restante .*"
+- runScript:
+    file: ../scripts/duration.js
+    env:
+      KEY: restAfter
+- assertTrue:
+    condition: ${output.restAfter <= output.restBefore - 5}
+    label: "Rest kept counting down in background (${output.restBefore}s -> ${output.restAfter}s)"
+- tapOn: "Pular"
+
+# --- Process restart (force stop, no data wipe): the active session is restored ---
+- stopApp
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible: "Treino em andamento: ${ROUTINE}\\. Abrir|Desmarcar série 1"
+    timeout: 30000
+- runFlow:
+    when:
+      visible: "Treino em andamento: ${ROUTINE}\\. Abrir"
+    commands:
+      - tapOn: "Treino em andamento: ${ROUTINE}\\. Abrir"
+- extendedWaitUntil:
+    visible: "Desmarcar série 1"
+    timeout: 10000
+- assertVisible: "Concluir série 2"
+# Re-opening the session restarts the native workout notification.
+- runFlow: ../common/open-notifications.yaml
+- extendedWaitUntil:
+    visible: "${ROUTINE} · \\d{2}:\\d{2}"
+    timeout: 10000
+- runFlow: ../common/close-notifications.yaml
+
+# --- Leave the device clean: discard the session ---
+- tapOn: "Sair do treino"
+- extendedWaitUntil:
+    visible: "Descartar treino"
+    timeout: 5000
+- tapOn: "Descartar"
+- extendedWaitUntil:
+    visible: "Aba Hoje|Aba Treinos"
+    timeout: 10000

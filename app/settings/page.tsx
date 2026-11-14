@@ -13,6 +13,7 @@ import { setTheme, useThemePreference } from '@/components/layout/ThemeToggle'
 import { useReduceEffects } from '@/components/layout/VisualEffectsToggle'
 import { DEFAULT_BAR_WEIGHT, getWeeklyGoals } from '@/lib/preferences'
 import { formatTimeOfDay, reminderTime, remindersSupported, usualTrainingTime } from '@/lib/reminders'
+import { ReminderScheduleStatus } from '@/components/layout/ReminderScheduleStatus'
 import { healthPlatformName, latestRestingHeartRate } from '@/lib/health'
 import { useHealthConnect } from '@/components/health/useHealthConnect'
 import { DEFAULT_CARDIO_GOAL, maxHeartRate, zoneRanges } from '@/lib/cardio'
@@ -126,7 +127,7 @@ export default function SettingsPage() {
         <h2 id="reminders-title" className="list-header">Lembretes</h2>
         <div className="list">
           <Row label="Lembrete de treino" detail={scheduledCount === 0 ? 'Defina dias nas suas rotinas para receber lembretes.' : `Em dias com treino agendado, às ${formatTimeOfDay(time)}.`}>
-            <Switch label="Lembrete de treino" checked={reminders.enabled} onChange={(enabled) => void updatePreferences({ reminders: { ...reminders, enabled } })} />
+            <Switch label="Ativar lembrete de treino" checked={reminders.enabled} onChange={(enabled) => void updatePreferences({ reminders: { ...reminders, enabled } })} />
           </Row>
           {reminders.enabled && (
             <Row label="Horário" htmlFor="reminder-time" detail={reminders.timeOfDay == null ? (usual != null ? `Automático: 30 min antes do seu horário habitual (${formatTimeOfDay(usual)}).` : 'Automático: 17:30 até aprender seu horário.') : 'Horário fixo.'}>
@@ -153,6 +154,7 @@ export default function SettingsPage() {
             ? 'Exemplo: “Hoje é dia de Superior A”, no horário em que você costuma treinar.'
             : 'No navegador, o lembrete aparece na tela Hoje. Notificações agendadas funcionam no app instalado.'}
         </p>
+        <ReminderScheduleStatus />
       </section>
 
       <section aria-labelledby="health-title" className="stack-section">

@@ -1,0 +1,25 @@
+appId: com.workoutpro.app
+# Smoke - main tabs
+name: 01-tabs-smoke
+tags:
+  - device
+  - smoke
+---
+- runFlow: ../common/launch-clean.yaml
+- tapOn: "Aba Hoje"
+- assertVisible: "Hoje"
+- tapOn: "Aba Treinos"
+- assertVisible: "Treinos\\."
+- assertVisible: "Criar treino"
+- tapOn: "Aba Progresso"
+- assertVisible: "Progresso\\."
+- scrollUntilVisible:
+    element: "Histórico\\."
+    direction: DOWN
+- tapOn: "Aba Saúde"
+- assertVisible: "Saúde\\."
+- tapOn: "Aba Você"
+- assertVisible: "Ajustes"
+- tapOn: "Aba Hoje"
+- assertVisible: "Hoje"
+- assertNotVisible: "Treino em andamento.*"

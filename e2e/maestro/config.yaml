@@ -1,0 +1,15 @@
+# Maestro workspace for the WorkoutPro Android app (com.workoutpro.app, debug build).
+#
+# !!! Every flow WIPES the app data (clearState) before it starts. !!!
+# Run only on an emulator or a spare device, through `npm run test:device -- --device <serial>`,
+# which sets WORKOUTPRO_E2E_ALLOW_WIPE=1. Without that variable each flow fails on its first step
+# (common/guard-wipe.yaml) before touching the app.
+flows:
+  - "flows/*"
+executionOrder:
+  continueOnFailure: false
+  flowsOrder:
+    - 01-tabs-smoke
+    - 02-rest-timer-notification
+    - 03-background-resume
+    - 04-reminders

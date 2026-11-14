@@ -14,6 +14,8 @@ const NAV_ITEMS = [
   { href: '/profile', icon: UserRound, label: 'Você' },
 ]
 
+// Tabs are labelled "Aba …" so they stay distinct from the page titles with the same text
+// (screen readers and the device E2E flows in e2e/maestro select them by this label).
 const ROOT_NAV_ROUTES = new Set(NAV_ITEMS.map((item) => item.href))
 
 /** Quiet, full-width frosted tab bar with a hairline top edge. */
@@ -47,6 +49,8 @@ export function BottomNav() {
               key={item.href}
               href={item.href}
               aria-current={isActive ? 'page' : undefined}
+              aria-label={`Aba ${item.label}`}
+              data-testid={`tab-${item.href.slice(1)}`}
               className={cn(
                 'flex min-w-0 flex-col items-center justify-center gap-1 transition-colors duration-200',
                 isActive ? 'text-[var(--foreground)]' : 'text-[var(--muted)]'

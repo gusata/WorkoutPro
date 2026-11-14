@@ -1,0 +1,7 @@
+# Refuses to continue unless the caller explicitly allowed wiping the app data.
+# Must be the first step of every flow (before any launchApp).
+appId: com.workoutpro.app
+---
+- assertTrue:
+    condition: ${typeof WORKOUTPRO_E2E_ALLOW_WIPE !== 'undefined' && String(WORKOUTPRO_E2E_ALLOW_WIPE) === '1'}
+    label: "WORKOUTPRO_E2E_ALLOW_WIPE=1 is required: these flows erase com.workoutpro.app data. Use an emulator or a spare device."

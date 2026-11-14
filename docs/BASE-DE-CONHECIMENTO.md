@@ -237,7 +237,7 @@ Estado validado em 19/08/2026:
 ## Hotspots e riscos residuais
 
 1. Sync real exige o schema atualizado; execute `npm run test:supabase:staging` com as duas contas descritas em `docs/SUPABASE-STAGING.md`.
-2. Testes locais não substituem validação do timer, notificações, deep link e login em aparelho Android físico.
-3. Os cinco assets-fonte atuais de ícone/splash são cópias da mesma imagem; artes independentes são necessárias para eliminar os 30 avisos sem degradar o visual.
+2. Timer, notificações, lembretes e retomada têm fluxos Maestro (`e2e/maestro`, `npm run test:device -- --device <serial>`) e testes instrumentados do `TimerForegroundService`; rode-os em emulador ou aparelho reserva (apagam os dados do app). Deep link e login ainda exigem validação manual.
+3. Ícone e splash vêm de uma única fonte (`scripts/generate-brand-assets.mjs` -> `assets/brand/*.svg`); não rode `npx @capacitor/assets generate`, que recriaria os PNGs duplicados por densidade.
 
 Ao mudar schema, sincronização, entidades, comandos ou rotas, atualize este documento no mesmo conjunto de alterações.

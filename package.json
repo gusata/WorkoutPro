@@ -16,6 +16,8 @@
     "test:visual": "node scripts/run-playwright.mjs visual.spec.ts",
     "pretest:visual:update": "npm run build",
     "test:visual:update": "node scripts/run-playwright.mjs visual.spec.ts --update-snapshots",
+    "test:device": "node scripts/run-device-e2e.mjs",
+    "brand:generate": "node scripts/generate-brand-assets.mjs",
     "test:supabase:staging": "node scripts/verify-supabase-staging.mjs",
     "audit:visual": "node scripts/visual-audit.mjs",
     "android": "npm run build && npx cap sync android && powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:JAVA_HOME='C:\\Program Files\\Android\\Android Studio\\jbr'; $env:ANDROID_HOME=Join-Path $env:LOCALAPPDATA 'Android\\Sdk'; npx cap run android\"",
