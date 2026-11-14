@@ -3,6 +3,8 @@ import { ALERT_CHANNEL_ID, ensureAlertChannel } from '@/lib/notifications'
 import type { ReminderPreferences, Workout, WorkoutSession } from '@/types'
 
 const REMINDER_BASE_ID = 3000
+/** Fired on window after every native re-schedule, with `detail: { scheduled }`. */
+export const REMINDERS_SYNCED_EVENT = 'workoutpro:reminders-synced'
 const DEFAULT_TIME = 18 * 60
 /** Reminders fire a little before the usual training time. */
 const LEAD_MINUTES = 30
@@ -45,6 +47,36 @@ export function reminderMessage(names: string[]) {
   return `Hoje é dia de ${names.slice(0, -1).join(', ')} e ${names.at(-1)}`
 }
 
+/** Weekly reminder notifications use ids 3000..3006 (one per weekday). */
+export function isReminderId(id: number) {
+  return Number.isInteger(id) && id >= REMINDER_BASE_ID && id < REMINDER_BASE_ID + 7
+}
+
+export function countReminderNotifications(notifications: { id: number }[]) {
+  return notifications.filter((notification) => isReminderId(notification.id)).length
+}
+
+export function scheduledRemindersLabel(count: number) {
+  if (count === 0) return 'Nenhum lembrete agendado neste aparelho.'
+  return `${count} ${count === 1 ? 'lembrete semanal agendado' : 'lembretes semanais agendados'} neste aparelho.`
+}
+
+/** How many weekly reminders the OS actually holds (null on the web / when it can't be read). */
+export async function pendingReminderCount(): Promise<number | null> {
+  if (!remindersSupported()) return null
+  try {
+    const { LocalNotifications } = await import('@capacitor/local-notifications')
+    const { notifications } = await LocalNotifications.getPending()
+    return countReminderNotifications(notifications)
+  } catch {
+    return null
+  }
+}
+
+function announceSync(scheduled: number) {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(REMINDERS_SYNCED_EVENT, { detail: { scheduled } }))
+}
+
 export function remindersSupported() {
   return typeof window !== 'undefined' && Capacitor.isNativePlatform()
 }
@@ -62,10 +94,10 @@ export async function syncReminders(
   const { LocalNotifications } = await import('@capacitor/local-notifications')
   const ids = Array.from({ length: 7 }, (_, weekday) => ({ id: REMINDER_BASE_ID + weekday }))
   await LocalNotifications.cancel({ notifications: ids })
-  if (!preferences?.enabled) return { scheduled: 0 }
+  if (!preferences?.enabled) { announceSync(0); return { scheduled: 0 } }
 
   const permission = await LocalNotifications.requestPermissions()
-  if (permission.display !== 'granted') return { scheduled: 0 }
+  if (permission.display !== 'granted') { announceSync(0); return { scheduled: 0 } }
 
   await ensureAlertChannel()
   const time = reminderTime(preferences, sessions)
@@ -83,5 +115,6 @@ export async function syncReminders(
     })
   }
   if (notifications.length > 0) await LocalNotifications.schedule({ notifications })
+  announceSync(notifications.length)
   return { scheduled: notifications.length }
 }

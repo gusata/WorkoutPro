@@ -1,0 +1,26 @@
+# Fresh install state: wipe data (only when allowed), grant notifications, skip the account screen.
+appId: com.workoutpro.app
+---
+- runFlow: guard-wipe.yaml
+- runFlow:
+    label: Wipe app data and launch (WORKOUTPRO_E2E_ALLOW_WIPE=1)
+    when:
+      true: ${typeof WORKOUTPRO_E2E_ALLOW_WIPE !== 'undefined' && String(WORKOUTPRO_E2E_ALLOW_WIPE) === '1'}
+    commands:
+      - launchApp:
+          clearState: true
+          permissions:
+            notifications: allow
+# The account screen only appears when the build has Supabase credentials.
+- extendedWaitUntil:
+    visible:
+      text: "Usar sem conta|Aba Hoje"
+    timeout: 30000
+- runFlow:
+    when:
+      visible: "Usar sem conta"
+    commands:
+      - tapOn: "Usar sem conta"
+- extendedWaitUntil:
+    visible: "Aba Hoje"
+    timeout: 30000

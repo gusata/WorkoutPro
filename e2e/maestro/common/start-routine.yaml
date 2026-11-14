@@ -1,0 +1,13 @@
+# From the routine detail page: start it and set a short (30 s) rest for Supino Reto.
+appId: com.workoutpro.app
+---
+- tapOn: "Iniciar"
+- extendedWaitUntil:
+    visible: "Concluir série 1"
+    timeout: 15000
+- tapOn: "Opções de Supino Reto"
+- scrollUntilVisible:
+    element: "30s"
+    direction: DOWN
+- tapOn: "30s"
+- tapOn: "Opções de Supino Reto"

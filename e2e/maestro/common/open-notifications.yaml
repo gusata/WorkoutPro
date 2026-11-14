@@ -1,0 +1,12 @@
+# Pulls down the notification shade (two swipes fully expand it on most launchers).
+appId: com.workoutpro.app
+---
+- swipe:
+    start: 50%, 1%
+    end: 50%, 70%
+    duration: 400
+- swipe:
+    start: 50%, 10%
+    end: 50%, 85%
+    duration: 400
+    optional: true

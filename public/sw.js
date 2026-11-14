@@ -1,5 +1,5 @@
 // Bump VERSION when the caching strategy changes; hashed build assets never need it.
-const VERSION = 'v4'
+const VERSION = 'v5'
 const STATIC_CACHE = `workoutpro-static-${VERSION}`
 const PAGE_CACHE = `workoutpro-pages-${VERSION}`
 const KEEP = new Set([STATIC_CACHE, PAGE_CACHE])
@@ -121,7 +121,7 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification(data.title || 'WorkoutPro', {
       body: data.body || '',
       icon: '/icons/icon-192.png',
-      badge: '/icons/icon-192.png',
+      badge: '/icons/badge-96.png',
       vibrate: [200, 100, 200],
     })
   )

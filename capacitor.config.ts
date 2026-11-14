@@ -11,6 +11,11 @@ const config: CapacitorConfig = {
     SplashScreen: {
       launchShowDuration: 0,
     },
+    LocalNotifications: {
+      // Monochrome status-bar icon (res/drawable/ic_stat_workoutpro.xml) tinted with the accent.
+      smallIcon: 'ic_stat_workoutpro',
+      iconColor: '#0071E3',
+    },
   },
 };
 

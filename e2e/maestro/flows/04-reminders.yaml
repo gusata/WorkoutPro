@@ -1,0 +1,59 @@
+appId: com.workoutpro.app
+# Reminders - weekly local notifications are scheduled, cancelled and survive a restart
+name: 04-reminders
+tags:
+  - device
+  - notifications
+  - reminders
+env:
+  ROUTINE: Rotina E2E Lembrete
+---
+- runFlow: ../common/launch-clean.yaml
+- runFlow:
+    file: ../common/create-routine.yaml
+    env:
+      ROUTINE_NAME: ${ROUTINE}
+      ALL_WEEKDAYS: "1"
+
+# --- Settings -> reminders are off after a clean install ---
+- tapOn: "Aba Você"
+- tapOn: "Ajustes"
+- scrollUntilVisible:
+    element: "Ativar lembrete de treino"
+    direction: DOWN
+- extendedWaitUntil:
+    visible: "Nenhum lembrete agendado neste aparelho\\."
+    timeout: 10000
+
+# --- Enable: one reminder per scheduled weekday is handed to the OS ---
+- tapOn: "Ativar lembrete de treino"
+- extendedWaitUntil:
+    visible: "7 lembretes semanais agendados neste aparelho\\."
+    timeout: 15000
+- assertVisible: "Em dias com treino agendado, às \\d{2}:\\d{2}\\."
+
+# --- Disable: all reminders are cancelled ---
+- tapOn: "Ativar lembrete de treino"
+- extendedWaitUntil:
+    visible: "Nenhum lembrete agendado neste aparelho\\."
+    timeout: 15000
+
+# --- Enable again and restart the process: the schedule is still there ---
+- tapOn: "Ativar lembrete de treino"
+- extendedWaitUntil:
+    visible: "7 lembretes semanais agendados neste aparelho\\."
+    timeout: 15000
+- stopApp
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible: "Aba Hoje"
+    timeout: 30000
+- tapOn: "Aba Você"
+- tapOn: "Ajustes"
+- scrollUntilVisible:
+    element: "Ativar lembrete de treino"
+    direction: DOWN
+- extendedWaitUntil:
+    visible: "7 lembretes semanais agendados neste aparelho\\."
+    timeout: 15000

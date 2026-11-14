@@ -1,0 +1,102 @@
+appId: com.workoutpro.app
+# Workout - rest timer notification, extend/skip, rest-end alert, finish and history
+name: 02-rest-timer-notification
+tags:
+  - device
+  - timer
+  - notifications
+env:
+  ROUTINE: Rotina E2E Descanso
+---
+- runFlow: ../common/launch-clean.yaml
+- runFlow:
+    file: ../common/create-routine.yaml
+    env:
+      ROUTINE_NAME: ${ROUTINE}
+- runFlow: ../common/start-routine.yaml
+
+# --- Set 1 starts the rest timer (in-app overlay + native foreground notification) ---
+- runFlow:
+    file: ../common/complete-set.yaml
+    env:
+      SET: "1"
+      WEIGHT: "40"
+      REPS: "10"
+- assertVisible: "Pular"
+- assertVisible: "Adicionar 15 segundos"
+- runFlow: ../common/open-notifications.yaml
+- extendedWaitUntil:
+    visible: "Descanso \\d{2}:\\d{2}"
+    timeout: 10000
+- runFlow: ../common/close-notifications.yaml
+
+# --- +15 s extends the countdown ---
+- copyTextFrom: "Descanso restante .*"
+- runScript:
+    file: ../scripts/duration.js
+    env:
+      KEY: restBefore
+- tapOn: "Adicionar 15 segundos"
+- copyTextFrom: "Descanso restante .*"
+- runScript:
+    file: ../scripts/duration.js
+    env:
+      KEY: restAfter
+- assertTrue:
+    condition: ${output.restAfter >= output.restBefore + 10}
+    label: "+15s extended the rest (before ${output.restBefore}s, after ${output.restAfter}s)"
+
+# --- Skip ends the rest; the notification goes back to the workout clock ---
+- tapOn: "Pular"
+- assertNotVisible: "Adicionar 15 segundos"
+- runFlow: ../common/open-notifications.yaml
+- extendedWaitUntil:
+    visible: "${ROUTINE} · \\d{2}:\\d{2}"
+    timeout: 10000
+- assertNotVisible: "Descanso \\d{2}:\\d{2}"
+- runFlow: ../common/close-notifications.yaml
+
+# --- Set 2: let the 30 s rest run out with the app in background -> "Descanso terminado" alert ---
+- runFlow:
+    file: ../common/complete-set.yaml
+    env:
+      SET: "2"
+      WEIGHT: "40"
+      REPS: "8"
+- assertVisible: "Pular"
+- pressKey: home
+- runFlow: ../common/open-notifications.yaml
+- extendedWaitUntil:
+    visible: "Descanso terminado"
+    timeout: 60000
+- assertVisible: "Hora da próxima série"
+- runFlow: ../common/close-notifications.yaml
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible: "Finalizar"
+    timeout: 10000
+- assertNotVisible: "Adicionar 15 segundos"
+
+# --- Finish (1 set left -> confirmation) and check the history ---
+- tapOn: "Finalizar"
+- extendedWaitUntil:
+    visible: "Finalizar treino incompleto"
+    timeout: 5000
+- tapOn: "Finalizar assim"
+- extendedWaitUntil:
+    visible: "Treino concluído"
+    timeout: 15000
+- tapOn: "Voltar ao início"
+- extendedWaitUntil:
+    visible: "Aba Hoje"
+    timeout: 10000
+- runFlow: ../common/open-notifications.yaml
+- assertNotVisible: "${ROUTINE} · \\d{2}:\\d{2}"
+- runFlow: ../common/close-notifications.yaml
+- tapOn: "Aba Progresso"
+- scrollUntilVisible:
+    element: ${ROUTINE}
+    direction: DOWN
+    timeout: 20000
+- assertVisible: "2 séries · .*"

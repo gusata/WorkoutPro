@@ -1,0 +1,7 @@
+# Idle wait without a fixed sleep command: waits for a text that never appears. env: WAIT_MS.
+appId: com.workoutpro.app
+---
+- extendedWaitUntil:
+    visible: "__workoutpro_e2e_never_visible__"
+    timeout: ${WAIT_MS}
+    optional: true
