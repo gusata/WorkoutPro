@@ -161,7 +161,8 @@ public class TimerForegroundService extends Service {
         long workoutSec = Math.max(0, (System.currentTimeMillis() - workoutStartMs) / 1000);
 
         NotificationCompat.Builder b = new NotificationCompat.Builder(this, CHANNEL_TIMER)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_workoutpro)
+            .setColor(getColor(R.color.brand_accent))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
