@@ -4,7 +4,7 @@ import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRe
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  Check, ChevronDown, Copy, Flame, Layers3, MoreHorizontal, NotebookPen, Play, Plus, Replace, Scale, Share, Timer, Trash2, Trophy, Video, X,
+  Check, ChevronDown, Copy, Layers3, MoreHorizontal, NotebookPen, Play, Plus, Replace, Scale, Share, Timer, Trash2, Trophy, Video, X,
 } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { Button, buttonClasses } from '@/components/ui/Button'
@@ -13,11 +13,12 @@ import { Modal } from '@/components/ui/Modal'
 import { RestPresetPicker, RestTimerOverlay } from '@/components/timer/RestTimer'
 import { PlateCalculator } from '@/components/training/PlateCalculator'
 import { VideoModal } from '@/components/training/MediaViewer'
+import { AutoWarmup, DiscomfortOption, ExerciseTrainingHints, WarmupOptions } from '@/components/training/ExerciseTrainingAids'
 import { useProfileStore } from '@/stores/useProfileStore'
 import { useSessionStore } from '@/stores/useSessionStore'
 import { useTimerStore } from '@/stores/useTimerStore'
 import { useWorkoutStore } from '@/stores/useWorkoutStore'
-import { generateWarmupSets, getProgressionSuggestion, SET_TYPES } from '@/lib/training'
+import { getProgressionSuggestion, SET_TYPES } from '@/lib/training'
 import { bestsByExercise, recordForSet, type ExerciseBest } from '@/lib/insights'
 import { estimateOneRm, lastSetsForExercise } from '@/lib/exerciseHistory'
 import { saveMedia } from '@/lib/media'
@@ -117,7 +118,7 @@ export default function ExecutePage() {
   const totals = useMemo(() => {
     const sets = active?.exercises.flatMap((item) => item.sets) ?? []
     const done = sets.filter((item) => item.completed)
-    return { all: sets.length, done: done.length, volume: done.reduce((sum, item) => sum + item.weight * item.reps, 0) }
+    return { all: sets.length, done: done.length, volume: done.filter((item) => item.setType !== 'warmup').reduce((sum, item) => sum + item.weight * item.reps, 0) }
   }, [active])
 
   const toggleCollapsed = useCallback((exerciseId: string) => {
@@ -362,11 +363,11 @@ const OPTION_BUTTON = 'flex min-h-12 items-center gap-2 rounded-[var(--radius-sm
 const ExerciseCard = memo(function ExerciseCard({
   exercise, collapsed, optionsOpen, barWeight, onToggleCollapsed, onToggleOptions, onReplace, onPlates, onRecordVideo, onPlayVideo,
 }: ExerciseCardProps) {
-  const { addSet, removeSet, duplicateSet, applySetToFollowing, updateExerciseNotes, setRestSeconds, insertWarmupSets } = useSessionStore(
+  const { addSet, removeSet, duplicateSet, applySetToFollowing, updateExerciseNotes, setRestSeconds } = useSessionStore(
     useShallow((state) => ({
       addSet: state.addSet, removeSet: state.removeSet, duplicateSet: state.duplicateSet,
       applySetToFollowing: state.applySetToFollowing, updateExerciseNotes: state.updateExerciseNotes,
-      setRestSeconds: state.setRestSeconds, insertWarmupSets: state.insertWarmupSets,
+      setRestSeconds: state.setRestSeconds,
     }))
   )
   const suggestion = useMemo(
@@ -378,13 +379,13 @@ const ExerciseCard = memo(function ExerciseCard({
   const doneCount = exercise.sets.filter((set) => set.completed).length
   const workSet = exercise.sets.find((set) => (set.setType ?? 'normal') !== 'warmup')
   const workWeight = workSet?.weight ?? 0
-  const warmupPreview = generateWarmupSets(workWeight, barWeight)
   const videoTarget = [...exercise.sets].reverse().find((set) => set.completed) ?? exercise.sets.find((set) => !set.completed) ?? exercise.sets[0]
   const videos = exercise.sets.map((set, index) => ({ set, index })).filter((item) => item.set.videoId)
   const allDone = doneCount === exercise.sets.length && exercise.sets.length > 0
 
   return (
     <section className={cn('tile !p-0', exercise.supersetId && 'shadow-[inset_3px_0_0_var(--accent-fill)]')} aria-label={exercise.exerciseName}>
+      <AutoWarmup exercise={exercise} barWeight={barWeight} />
       <div className="flex items-center gap-1 py-3 pl-5 pr-2">
         <button
           type="button"
@@ -418,15 +419,7 @@ const ExerciseCard = memo(function ExerciseCard({
 
       {optionsOpen && (
         <div id={optionsId} className="grid grid-cols-2 gap-2 border-t border-[var(--separator)] p-4">
-          <button
-            type="button"
-            disabled={warmupPreview.length === 0}
-            onClick={() => { insertWarmupSets(exercise.exerciseId, warmupPreview); onToggleOptions(exercise.exerciseId) }}
-            className={cn(OPTION_BUTTON, 'disabled:opacity-40')}
-            aria-label={warmupPreview.length ? `Gerar aquecimento: ${warmupPreview.map((step) => `${formatDecimal(step.weight)} kg por ${step.reps}`).join(', ')}` : 'Gerar aquecimento (defina a carga primeiro)'}
-          >
-            <Flame size={16} aria-hidden />Aquecimento
-          </button>
+          <WarmupOptions exercise={exercise} barWeight={barWeight} onDone={() => onToggleOptions(exercise.exerciseId)} />
           <button type="button" onClick={() => onPlates(exercise.exerciseName, workWeight)} className={OPTION_BUTTON}>
             <Scale size={16} aria-hidden />Anilhas
           </button>
@@ -436,11 +429,7 @@ const ExerciseCard = memo(function ExerciseCard({
           <button type="button" disabled={!videoTarget} onClick={() => videoTarget && onRecordVideo(exercise.exerciseId, videoTarget.id)} className={OPTION_BUTTON}>
             <Video size={16} aria-hidden />Gravar vídeo
           </button>
-          {warmupPreview.length > 0 && (
-            <p className="footnote col-span-2 px-1 text-[var(--muted)]">
-              Aquecimento sugerido: {warmupPreview.map((step) => `${formatDecimal(step.weight)} kg × ${step.reps}`).join(' → ')}
-            </p>
-          )}
+          <DiscomfortOption exercise={exercise} />
           <label className="col-span-2 mt-2 block">
             <span className="footnote mb-1.5 flex items-center gap-1.5 font-semibold text-[var(--muted)]"><NotebookPen size={14} aria-hidden />Notas e ajustes</span>
             <textarea
@@ -460,11 +449,7 @@ const ExerciseCard = memo(function ExerciseCard({
 
       {!collapsed && (
         <div id={panelId} className="border-t border-[var(--separator)] px-3 pb-4 pt-3 sm:px-4">
-          {suggestion && (
-            <p className={cn('footnote mb-3 rounded-[var(--radius-sm)] px-3.5 py-2.5', suggestion.progressed ? 'bg-[color-mix(in_srgb,var(--success-fill)_12%,transparent)] text-[var(--success)]' : 'bg-[var(--fill)] text-[var(--muted-strong)]')}>
-              <strong className="font-semibold">{formatDecimal(suggestion.weight)} kg sugeridos.</strong> {suggestion.reason}
-            </p>
-          )}
+          <ExerciseTrainingHints exercise={exercise} suggestion={suggestion} barWeight={barWeight} onReplace={onReplace} />
           <div className={cn(SET_GRID, 'caption mb-1 px-1 text-center font-semibold text-[var(--muted)]')} aria-hidden>
             <span>Tipo</span><span>Antes</span><span>Kg</span><span>Reps</span><span>RIR</span><span />
           </div>

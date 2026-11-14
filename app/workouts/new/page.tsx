@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, ChevronRight, Plus, Search, Sparkles } from 'lucide-react'
+import Link from 'next/link'
+import { Check, ChevronRight, Plus, Search, Sparkles, WandSparkles } from 'lucide-react'
 import { useWorkoutStore } from '@/stores/useWorkoutStore'
 import { Button } from '@/components/ui/Button'
 import { Input, Select, TextArea } from '@/components/ui/Input'
@@ -11,6 +12,7 @@ import { Hero, LocalNav } from '@/components/layout/PageHeader'
 import { MUSCLE_GROUPS, readableOn, WORKOUT_COLORS } from '@/lib/utils'
 import { exerciseMatches } from '@/lib/training'
 import { WORKOUT_TEMPLATES, type WorkoutTemplate } from '@/lib/workoutTemplates'
+import { normalizeExerciseName } from '@/lib/exerciseCandidates'
 import type { MuscleGroup, WorkoutExerciseConfig } from '@/types'
 
 const WEEKDAYS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
@@ -65,7 +67,7 @@ export default function NewWorkoutPage() {
     setSaving(true)
     const ids: string[] = []
     for (const item of template.exercises) {
-      const existing = exercises.find((exercise) => exercise.name.toLowerCase() === item.name.toLowerCase())
+      const existing = exercises.find((exercise) => normalizeExerciseName(exercise.name) === normalizeExerciseName(item.name))
       if (existing) {
         ids.push(existing.id)
         if (!existing.notes && item.notes) await updateExercise(existing.id, { notes: item.notes })
@@ -99,6 +101,14 @@ export default function NewWorkoutPage() {
         </span>
         <ChevronRight size={18} className="text-[#2997ff]" aria-hidden />
       </button>
+      <Link href="/workouts/generate" className="tile tile-link mt-3 flex w-full items-center gap-4 !py-5 text-left">
+        <span aria-hidden className="flex h-11 w-11 flex-none items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent)]"><WandSparkles size={19} /></span>
+        <span className="min-w-0 flex-1">
+          <span className="headline block">Gerar rotina completa</span>
+          <span className="footnote block text-[var(--muted)]">Escolha dias, objetivo e equipamentos</span>
+        </span>
+        <ChevronRight size={18} className="text-[var(--muted)]" aria-hidden />
+      </Link>
 
       <section className="stack-section space-y-6" aria-label="Detalhes">
         <Input label="Nome da rotina" placeholder="Ex.: Superior A" value={name} onChange={(event) => setName(event.target.value)} hint={selected.length === 0 ? 'Selecione ao menos um exercício abaixo para criar.' : `${selected.length} exercício${selected.length > 1 ? 's' : ''} selecionado${selected.length > 1 ? 's' : ''}.`} />

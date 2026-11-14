@@ -228,7 +228,7 @@ export function buildRecap(
     workoutCount.set(session.workoutId, (workoutCount.get(session.workoutId) ?? 0) + 1)
     for (const item of session.exercises) {
       const work = item.sets.filter(isWorkSet)
-      sets += item.sets.length
+      sets += work.length
       setsPerExercise.set(item.exerciseId, (setsPerExercise.get(item.exerciseId) ?? 0) + work.length)
       for (const set of work) {
         if (!heaviest || set.weight > heaviest.weight) {

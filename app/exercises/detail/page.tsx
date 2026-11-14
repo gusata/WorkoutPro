@@ -11,6 +11,7 @@ import { Input, TextArea } from '@/components/ui/Input'
 import { LocalNav, SectionHeader } from '@/components/layout/PageHeader'
 import { StrengthChart } from '@/components/insights/StrengthCard'
 import { VideoModal } from '@/components/training/MediaViewer'
+import { DiscomfortHistory } from '@/components/training/DiscomfortHistory'
 import { useProfileStore } from '@/stores/useProfileStore'
 import { useWorkoutStore } from '@/stores/useWorkoutStore'
 import { formatDate, formatDecimal, formatDuration, formatVolume } from '@/lib/utils'
@@ -109,6 +110,8 @@ function ExerciseHistoryContent() {
           </div>
         </section>
       )}
+
+      <DiscomfortHistory exerciseId={exercise.id} sessions={sessions} />
 
       <section aria-labelledby="notes-title" className="stack-section">
         <SectionHeader

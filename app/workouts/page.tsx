@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ChevronRight, MoreHorizontal, Pencil, Play, Plus, Trash2 } from 'lucide-react'
+import { ChevronRight, MoreHorizontal, Pencil, Play, Plus, Trash2, WandSparkles } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Hero, LocalNav } from '@/components/layout/PageHeader'
@@ -166,6 +166,16 @@ export default function WorkoutsPage() {
               <span className="min-w-0 flex-1">
                 <span className="headline block">Nova rotina</span>
                 <span className="footnote block text-[var(--muted)]">Do zero ou de um modelo pronto</span>
+              </span>
+              <ChevronRight size={18} className="flex-none text-[var(--muted)]" aria-hidden />
+            </Link>
+          </li>
+          <li>
+            <Link href="/workouts/generate" className="tile tile-link flex items-center gap-4 !py-5 !pl-5">
+              <span aria-hidden className="flex h-11 w-11 flex-none items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent)]"><WandSparkles size={19} strokeWidth={2.2} /></span>
+              <span className="min-w-0 flex-1">
+                <span className="headline block">Gerar rotina</span>
+                <span className="footnote block text-[var(--muted)]">Divisão completa pelos seus dias, objetivo e equipamentos</span>
               </span>
               <ChevronRight size={18} className="flex-none text-[var(--muted)]" aria-hidden />
             </Link>
