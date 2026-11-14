@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ChevronRight, MoreHorizontal, Pencil, Play, Plus, Trash2 } from 'lucide-react'
+import { BookOpen, ChevronRight, MoreHorizontal, Pencil, Play, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Hero, LocalNav } from '@/components/layout/PageHeader'
@@ -172,6 +172,15 @@ export default function WorkoutsPage() {
           </li>
         </ul>
       </section>
+
+      <Link href="/exercises/library" className="tile tile-link mt-3 flex items-center gap-4 !py-5 !pl-5">
+        <span aria-hidden className="flex h-11 w-11 flex-none items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent)]"><BookOpen size={19} /></span>
+        <span className="min-w-0 flex-1">
+          <span className="headline block">Biblioteca de exercícios</span>
+          <span className="footnote block text-[var(--muted)]">Execução, erros comuns e ilustrações</span>
+        </span>
+        <ChevronRight size={18} className="flex-none text-[var(--muted)]" aria-hidden />
+      </Link>
 
       <TrainingBlockCard />
 

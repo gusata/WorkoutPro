@@ -7,12 +7,15 @@ import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Link2, Play, Plus, Searc
 import { Button } from '@/components/ui/Button'
 import { DecimalInput } from '@/components/ui/DecimalInput'
 import { Modal } from '@/components/ui/Modal'
+import { SegmentedControl } from '@/components/ui/SegmentedControl'
+import { LibraryPicker } from '@/components/library/LibraryPicker'
 import { LocalNav, SectionHeader } from '@/components/layout/PageHeader'
 import { useProfileStore } from '@/stores/useProfileStore'
 import { useSessionStore } from '@/stores/useSessionStore'
 import { useWorkoutStore } from '@/stores/useWorkoutStore'
 import { exerciseMatches } from '@/lib/training'
 import { formatDate, formatVolume } from '@/lib/utils'
+import type { LibraryExercise } from '@/lib/exerciseLibrary'
 import type { Exercise, WorkoutExerciseConfig } from '@/types'
 
 const WEEKDAYS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
@@ -25,6 +28,7 @@ function WorkoutDetail() {
   const exercises = useWorkoutStore((state) => state.exercises)
   const updateWorkout = useWorkoutStore((state) => state.updateWorkout)
   const addExerciseToWorkout = useWorkoutStore((state) => state.addExerciseToWorkout)
+  const addLibraryExercise = useWorkoutStore((state) => state.addLibraryExercise)
   const removeExerciseFromWorkout = useWorkoutStore((state) => state.removeExerciseFromWorkout)
   const reorderExercises = useWorkoutStore((state) => state.reorderExercises)
   const sessions = useProfileStore((state) => state.sessions)
@@ -37,6 +41,8 @@ function WorkoutDetail() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [query, setQuery] = useState('')
+  const [addSource, setAddSource] = useState<'mine' | 'library'>('mine')
+  const workoutLibraryIds = useMemo(() => new Set(workoutExercises.flatMap((exercise) => exercise.libraryId ? [exercise.libraryId] : [])), [workoutExercises])
   const recent = useMemo(() => sessions.filter((session) => session.workoutId === id && session.finishedAt).sort((a, b) => new Date(b.finishedAt!).getTime() - new Date(a.finishedAt!).getTime()).slice(0, 5), [id, sessions])
 
   if (!workout) return <div className="apple-page page-narrow pt-24"><p className="subhead text-center text-[var(--muted)]">Treino não encontrado.</p></div>
@@ -52,6 +58,11 @@ function WorkoutDetail() {
   async function changeConfig(exerciseId: string, updates: Partial<WorkoutExerciseConfig>) {
     const configs = workout!.exerciseIds.map((currentId) => currentId === exerciseId ? { ...configFor(currentId), ...updates } : configFor(currentId))
     await updateWorkout(id, { exerciseConfigs: configs })
+  }
+
+  async function addFromLibrary(item: LibraryExercise) {
+    const exerciseId = await addLibraryExercise(item.id)
+    await addExerciseToWorkout(id, exerciseId)
   }
 
   async function start() { await startSession(workout!, workoutExercises); router.push('/workouts/execute') }
@@ -156,6 +167,10 @@ function WorkoutDetail() {
       </section>
 
       <Modal open={adding} onClose={() => setAdding(false)} title="Adicionar exercício">
+        <SegmentedControl label="Origem do exercício" value={addSource} onChange={setAddSource} options={[{ value: 'mine', label: 'Meus exercícios' }, { value: 'library', label: 'Biblioteca' }]} className="mb-4" />
+        {addSource === 'library' ? (
+          <LibraryPicker inSheet addedIds={workoutLibraryIds} onAdd={addFromLibrary} addLabel="Adicionar ao treino" addedLabel="No treino" />
+        ) : (<>
         <label className="relative mb-3 block">
           <span className="sr-only">Buscar exercício</span>
           <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted)]" aria-hidden />
@@ -169,6 +184,7 @@ function WorkoutDetail() {
             </button>
           ))}
         </div>
+        </>)}
       </Modal>
     </div>
   )

@@ -11,6 +11,8 @@ import { Input, TextArea } from '@/components/ui/Input'
 import { LocalNav, SectionHeader } from '@/components/layout/PageHeader'
 import { StrengthChart } from '@/components/insights/StrengthCard'
 import { VideoModal } from '@/components/training/MediaViewer'
+import { LibraryExerciseInfo } from '@/components/library/LibraryExerciseInfo'
+import { findLibraryMatch } from '@/lib/exerciseLibrary'
 import { useProfileStore } from '@/stores/useProfileStore'
 import { useWorkoutStore } from '@/stores/useWorkoutStore'
 import { formatDate, formatDecimal, formatDuration, formatVolume } from '@/lib/utils'
@@ -35,6 +37,7 @@ function ExerciseHistoryContent() {
 
   const history = useMemo(() => getExerciseHistory(id, sessions, workouts), [id, sessions, workouts])
   const records = useMemo(() => getExerciseRecords(history), [history])
+  const library = exercise ? findLibraryMatch(exercise) : undefined
 
   useEffect(() => {
     if (!id) return
@@ -87,6 +90,20 @@ function ExerciseHistoryContent() {
           </div>
         ))}
       </section>
+
+      {library && (
+        <section aria-labelledby="technique-title" className="stack-section">
+          <SectionHeader
+            id="technique-title"
+            title="Técnica."
+            subtitle={exercise.libraryId ? 'Da biblioteca de exercícios.' : `Parece ser "${library.name}" da biblioteca.`}
+            action={exercise.libraryId ? undefined : <button type="button" onClick={() => void updateExercise(exercise.id, { libraryId: library.id })} className="link -mb-2.5 flex-none text-[17px]">Vincular</button>}
+          />
+          <div className="tile">
+            <LibraryExerciseInfo item={library} />
+          </div>
+        </section>
+      )}
 
       <section aria-labelledby="strength-title" className="stack-section">
         <SectionHeader id="strength-title" title="Força." subtitle="1RM estimado por sessão e linha de tendência." />

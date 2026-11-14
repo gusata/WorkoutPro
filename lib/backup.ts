@@ -138,6 +138,7 @@ function parseExercise(value: unknown, index: number): Exercise {
     equipment: isString(value.equipment) ? value.equipment : undefined,
     machineSettings: isString(value.machineSettings) ? value.machineSettings : undefined,
     alternatives: Array.isArray(value.alternatives) ? value.alternatives.filter(isString) : [],
+    libraryId: isString(value.libraryId) && value.libraryId ? value.libraryId : undefined,
     createdAt,
     updatedAt: optionalDate(value.updatedAt, createdAt, `exercises[${index}].updatedAt`),
   }
