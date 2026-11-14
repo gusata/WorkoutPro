@@ -3,7 +3,7 @@
 import { create } from 'zustand'
 import { persist, type PersistStorage, type StorageValue } from 'zustand/middleware'
 import { db } from '@/lib/db'
-import type { ActiveExercise, ActiveSession, ActiveSet, WorkoutSession, Workout, Exercise } from '@/types'
+import type { ActiveExercise, ActiveSession, ActiveSet, DiscomfortNote, WorkoutSession, Workout, Exercise } from '@/types'
 import { generateId } from '@/lib/utils'
 import { xpForWorkout } from '@/lib/gamification'
 import { queueSync } from '@/lib/syncQueue'
@@ -12,6 +12,9 @@ import { applySessionToProfile } from '@/lib/profileStats'
 import { useTimerStore } from '@/stores/useTimerStore'
 import { useProfileStore } from '@/stores/useProfileStore'
 import { differenceInCalendarDays } from 'date-fns'
+import { applyPlanToSets } from '@/lib/trainingBlocks'
+
+const isWorkSet = (set: Pick<ActiveSet, 'setType'>) => (set.setType ?? 'normal') !== 'warmup'
 
 export type FinishedSession = WorkoutSession & { newPrs: number }
 
@@ -114,6 +117,8 @@ interface SessionStore {
   insertWarmupSets: (exerciseId: string, steps: Array<{ weight: number; reps: number }>) => void
   setRestSeconds: (exerciseId: string, seconds: number) => void
   moveExercise: (exerciseId: string, direction: -1 | 1) => void
+  setExerciseDiscomfort: (exerciseId: string, discomfort: DiscomfortNote | null) => void
+  applyExercisePlan: (exerciseId: string, plan: { sets: number; weight: number | null }) => void
 }
 
 export const useSessionStore = create<SessionStore>()(
@@ -155,6 +160,7 @@ export const useSessionStore = create<SessionStore>()(
                 muscleGroup: e.muscleGroup,
                 notes: e.notes,
                 machineSettings: e.machineSettings,
+                equipment: e.equipment,
                 previousSets: prevSets.map((set) => ({
                   weight: set.weight, reps: set.reps, rpe: set.rpe, rir: set.rir, setType: set.setType,
                 })),
@@ -190,11 +196,13 @@ export const useSessionStore = create<SessionStore>()(
         let totalVolume = 0
         const sessionExercises = active.exercises.map((ae) => {
           const completedSets = ae.sets.filter((s) => s.completed)
-          completedSets.forEach((s) => {
+          // Warm-ups are recorded but never count as volume.
+          completedSets.filter(isWorkSet).forEach((s) => {
             totalVolume += s.weight * s.reps
           })
           return {
             exerciseId: ae.exerciseId,
+            ...(ae.discomfort ? { discomfort: ae.discomfort } : {}),
             sets: completedSets.map((s) => ({
               id: s.id,
               weight: s.weight,
@@ -218,6 +226,7 @@ export const useSessionStore = create<SessionStore>()(
           for (const item of previous.exercises) {
             if (!trainedIds.has(item.exerciseId)) continue
             for (const set of item.sets) {
+              if (!isWorkSet(set)) continue
               const estimate = estimateOneRm(set.weight, set.reps)
               if (estimate > (bestByExercise.get(item.exerciseId) ?? 0)) bestByExercise.set(item.exerciseId, estimate)
             }
@@ -227,7 +236,7 @@ export const useSessionStore = create<SessionStore>()(
         for (const exercise of sessionExercises) {
           if (exercise.sets.length === 0) continue
           const previousBest = bestByExercise.get(exercise.exerciseId) ?? 0
-          const currentBest = exercise.sets.reduce(
+          const currentBest = exercise.sets.filter(isWorkSet).reduce(
             (best, set) => Math.max(best, estimateOneRm(set.weight, set.reps)),
             0
           )
@@ -427,6 +436,9 @@ export const useSessionStore = create<SessionStore>()(
                 muscleGroup: replacement.muscleGroup,
                 notes: replacement.notes,
                 machineSettings: replacement.machineSettings,
+                equipment: replacement.equipment,
+                discomfort: null,
+                warmupGenerated: false,
                 previousSets,
                 // Pre-fill untouched sets with the replacement's own history.
                 sets: exercise.sets.map((item, index) => {
@@ -452,7 +464,7 @@ export const useSessionStore = create<SessionStore>()(
                 id: generateId(), weight: step.weight, reps: step.reps, rpe: null, rir: null,
                 setType: 'warmup', completed: false, completedAt: null,
               }))
-              return { ...exercise, sets: [...warmups, ...kept] }
+              return { ...exercise, warmupGenerated: true, sets: [...warmups, ...kept] }
             }),
           },
         }))
@@ -470,6 +482,30 @@ export const useSessionStore = create<SessionStore>()(
             },
           }
         })
+      },
+
+      setExerciseDiscomfort: (exerciseId, discomfort) => {
+        set((state) => !state.active ? state : ({
+          active: {
+            ...state.active,
+            exercises: state.active.exercises.map((exercise) =>
+              exercise.exerciseId === exerciseId ? { ...exercise, discomfort } : exercise
+            ),
+          },
+        }))
+      },
+
+      applyExercisePlan: (exerciseId, plan) => {
+        set((state) => !state.active ? state : ({
+          active: {
+            ...state.active,
+            exercises: state.active.exercises.map((exercise) =>
+              exercise.exerciseId === exerciseId
+                ? { ...exercise, sets: applyPlanToSets(exercise.sets, plan.sets, plan.weight) }
+                : exercise
+            ),
+          },
+        }))
       },
 
       moveExercise: (exerciseId, direction) => {

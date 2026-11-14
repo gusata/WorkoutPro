@@ -1,56 +1,53 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { addDays, format } from 'date-fns'
+import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import { ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
-import { Input } from '@/components/ui/Input'
-import { SegmentedControl } from '@/components/ui/SegmentedControl'
-import { Switch } from '@/components/ui/Switch'
-import { DecimalInput } from '@/components/ui/DecimalInput'
+import { BlockEditor } from '@/components/training/BlockEditor'
+import { BlockSummarySheet, blockDateRange } from '@/components/training/BlockSummarySheet'
 import { useProfileStore } from '@/stores/useProfileStore'
-import { getBlockProgress, getBlockWeeks, getWeeklyGoals } from '@/lib/preferences'
-import { generateId } from '@/lib/utils'
+import { useWorkoutStore } from '@/stores/useWorkoutStore'
+import { getBlockProgress } from '@/lib/preferences'
+import { archiveBlock, blockWeekSummaries, goalLabel, nextBlockDraft } from '@/lib/trainingBlocks'
+import { formatVolume } from '@/lib/utils'
 import type { TrainingBlock } from '@/types'
 
-const WEEK_OPTIONS = [
-  { value: '4', label: '4 sem' },
-  { value: '5', label: '5 sem' },
-  { value: '6', label: '6 sem' },
-  { value: '8', label: '8 sem' },
-] as const
-
-const RAMP_OPTIONS = [
-  { value: '5', label: '+5%' },
-  { value: '10', label: '+10%' },
-  { value: '15', label: '+15%' },
-] as const
-
-function nextMonday(from = new Date()) {
-  const day = from.getDay()
-  const date = addDays(from, day === 1 ? 0 : (8 - day) % 7)
-  date.setHours(0, 0, 0, 0)
-  return date
-}
+type EditorState = { initial: TrainingBlock | null; isNew: boolean } | null
 
 export function TrainingBlockCard() {
   const profile = useProfileStore((state) => state.profile)
   const sessions = useProfileStore((state) => state.sessions)
   const updateProfile = useProfileStore((state) => state.updateProfile)
+  const workouts = useWorkoutStore((state) => state.workouts)
+  const exercises = useWorkoutStore((state) => state.exercises)
   const block = profile?.trainingBlock ?? null
-  const [editing, setEditing] = useState(false)
+  const history = useMemo(() => profile?.preferences?.trainingBlockHistory ?? [], [profile?.preferences?.trainingBlockHistory])
+  const [editor, setEditor] = useState<EditorState>(null)
   const [confirmEnd, setConfirmEnd] = useState(false)
+  const [summaryOf, setSummaryOf] = useState<{ block: TrainingBlock; offerNext: boolean } | null>(null)
 
-  const weeks = useMemo(() => (block ? getBlockWeeks(block) : []), [block])
+  const weeks = useMemo(() => (block ? blockWeekSummaries(block, sessions) : []), [block, sessions])
   const progress = block ? getBlockProgress(block) : null
-  const actual = useMemo(() => weeks.map((week) => {
-    const end = addDays(week.start, 7)
-    return sessions
-      .filter((session) => session.finishedAt && new Date(session.finishedAt) >= week.start && new Date(session.finishedAt) < end)
-      .reduce((total, session) => total + session.exercises.reduce((sum, item) => sum + item.sets.filter((set) => (set.setType ?? 'normal') !== 'warmup').length, 0), 0)
-  }), [sessions, weeks])
-  const max = Math.max(1, ...weeks.map((week) => week.targetSets), ...actual)
+  const max = Math.max(1, ...weeks.map((week) => Math.max(week.targetSets, week.doneSets)))
+  const coveredNames = block?.workoutIds?.length
+    ? workouts.filter((workout) => block.workoutIds!.includes(workout.id)).map((workout) => workout.name)
+    : []
+
+  async function endBlock() {
+    if (!block) return
+    const nextHistory = archiveBlock(block, history)
+    await updateProfile({ trainingBlock: null, preferences: { ...(profile?.preferences ?? {}), trainingBlockHistory: nextHistory } })
+    setConfirmEnd(false)
+    setSummaryOf({ block: nextHistory[0], offerNext: true })
+  }
+
+  async function saveBlock(next: TrainingBlock) {
+    await updateProfile({ trainingBlock: next })
+    setEditor(null)
+  }
 
   return (
     <section id="bloco" aria-labelledby="block-title" className="stack-section scroll-mt-20">
@@ -61,12 +58,15 @@ export function TrainingBlockCard() {
 
       {!block ? (
         <div className="tile text-center">
-          <p className="eyebrow">Novo</p>
+          <p className="eyebrow">{history.length ? 'Entre blocos' : 'Novo'}</p>
           <h3 className="title-1 mt-1">Treine em blocos.</h3>
           <p className="subhead mx-auto mt-2 max-w-sm text-[var(--muted)]">
-            O app aumenta sua meta de séries a cada semana e programa uma semana leve para você recuperar.
+            O app aumenta as séries de cada exercício semana a semana e programa uma semana leve para você recuperar.
           </p>
-          <Button className="mt-6" onClick={() => setEditing(true)}>Criar bloco</Button>
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            {history[0] && <Button onClick={() => setEditor({ initial: nextBlockDraft(history[0]), isNew: true })}>Próximo bloco</Button>}
+            <Button variant={history[0] ? 'secondary' : 'primary'} onClick={() => setEditor({ initial: null, isNew: true })}>Criar bloco</Button>
+          </div>
         </div>
       ) : (
         <div className="tile">
@@ -76,28 +76,34 @@ export function TrainingBlockCard() {
                 : `Semana ${progress?.weekNumber} de ${block.weeks}${progress?.week?.deload ? ' · Deload' : ''}`}
           </p>
           <h3 className="title-1 mt-1">{block.name}</h3>
+          <p className="footnote mt-1 text-[var(--muted)]">
+            {[goalLabel(block.goal), blockDateRange(block), coveredNames.length ? coveredNames.join(', ') : 'Todas as rotinas'].filter(Boolean).join(' · ')}
+          </p>
           {progress?.week && (
-            <p className="subhead mt-2 text-[var(--muted)]">
-              Meta desta semana: <span className="font-semibold text-[var(--foreground)]">{progress.week.targetSets} séries</span>. Já feitas: {actual[progress.week.index]}.
+            <p className="subhead mt-3 text-[var(--muted)]">
+              {progress.week.deload
+                ? <>Semana leve: <span className="font-semibold text-[var(--foreground)]">{progress.week.targetSets} séries</span>, metade por exercício e carga ~10% menor. </>
+                : <>Meta desta semana: <span className="font-semibold text-[var(--foreground)]">{progress.week.targetSets} séries</span>. </>}
+              Já feitas: {weeks[progress.week.index]?.doneSets ?? 0}. As séries de cada exercício aparecem na execução.
             </p>
           )}
 
           <figure className="mt-7">
             <figcaption className="sr-only">
-              {weeks.map((week, index) => `Semana ${index + 1}: meta ${week.targetSets}, feitas ${actual[index]}`).join('; ')}
+              {weeks.map((week) => `Semana ${week.index + 1}: meta ${week.targetSets}, feitas ${week.doneSets}`).join('; ')}
             </figcaption>
             <div aria-hidden className="flex h-36 items-end gap-2">
-              {weeks.map((week, index) => {
-                const current = progress?.week?.index === index
+              {weeks.map((week) => {
+                const current = progress?.week?.index === week.index
                 return (
                   <div key={week.index} className="relative flex h-full flex-1 flex-col justify-end">
                     <div className="relative w-full rounded-[6px] bg-[var(--fill-strong)]" style={{ height: `${(week.targetSets / max) * 100}%` }}>
                       <div
                         className="absolute bottom-0 left-0 right-0 rounded-[6px]"
                         style={{
-                          height: `${Math.min(100, (actual[index] / Math.max(week.targetSets, 1)) * 100)}%`,
+                          height: `${Math.min(100, (week.doneSets / Math.max(week.targetSets, 1)) * 100)}%`,
                           background: week.deload ? 'var(--success-fill)' : 'var(--accent-fill)',
-                          opacity: current || actual[index] > 0 ? 1 : 0,
+                          opacity: current || week.doneSets > 0 ? 1 : 0,
                         }}
                       />
                     </div>
@@ -106,105 +112,74 @@ export function TrainingBlockCard() {
               })}
             </div>
             <div aria-hidden className="mt-2 flex gap-2">
-              {weeks.map((week, index) => (
-                <span key={week.index} className={`caption flex-1 text-center ${progress?.week?.index === index ? 'font-bold text-[var(--foreground)]' : 'text-[var(--muted)]'}`}>
-                  {week.deload ? 'D' : `S${index + 1}`}
+              {weeks.map((week) => (
+                <span key={week.index} className={`caption flex-1 text-center ${progress?.week?.index === week.index ? 'font-bold text-[var(--foreground)]' : 'text-[var(--muted)]'}`}>
+                  {week.deload ? 'D' : `S${week.index + 1}`}
                 </span>
               ))}
             </div>
           </figure>
 
+          <ul className="mt-6 divide-y divide-[var(--separator)] rounded-[var(--radius-sm)] bg-[var(--fill)]">
+            {weeks.map((week) => (
+              <li key={week.index} className={`flex items-center gap-3 px-3.5 py-2.5 ${progress?.week?.index === week.index ? 'font-semibold' : ''}`}>
+                <span className="footnote w-24 flex-none">{week.deload ? `Deload (S${week.index + 1})` : `Semana ${week.index + 1}`}</span>
+                <span className="footnote numeric flex-1 text-right text-[var(--muted)]">
+                  <span className="text-[var(--foreground)]">{week.doneSets}</span>/{week.targetSets} séries{week.volume > 0 ? ` · ${formatVolume(week.volume)}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+
           <div className="mt-6 flex flex-wrap gap-3">
-            <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>Editar</Button>
-            <Button variant="ghost" size="sm" onClick={() => setConfirmEnd(true)}>Encerrar bloco</Button>
+            {progress?.finished
+              ? <Button size="sm" onClick={() => void endBlock()}>Ver resumo e encerrar</Button>
+              : <Button variant="secondary" size="sm" onClick={() => setEditor({ initial: block, isNew: false })}>Editar</Button>}
+            {!progress?.finished && <Button variant="ghost" size="sm" onClick={() => setConfirmEnd(true)}>Encerrar bloco</Button>}
           </div>
         </div>
       )}
 
-      {editing && (
+      {history.length > 0 && (
+        <div className="mt-6">
+          <p className="list-header">Blocos anteriores</p>
+          <div className="list">
+            {history.map((item) => (
+              <button key={item.id} type="button" onClick={() => setSummaryOf({ block: item, offerNext: !block })} className="grouped-row flex min-h-14 w-full items-center gap-3 px-5 py-3 text-left">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{item.name}</span>
+                  <span className="footnote block text-[var(--muted)]">{[goalLabel(item.goal), `${item.weeks} semanas`, blockDateRange(item)].filter(Boolean).join(' · ')}</span>
+                </span>
+                <ChevronRight size={18} className="flex-none text-[var(--muted)]" aria-hidden />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {editor && (
         <BlockEditor
-          initial={block}
-          defaultSets={getWeeklyGoals(profile).sets}
-          onClose={() => setEditing(false)}
-          onSave={async (next) => { await updateProfile({ trainingBlock: next }); setEditing(false) }}
+          initial={editor.initial}
+          isNew={editor.isNew}
+          workouts={workouts}
+          onClose={() => setEditor(null)}
+          onSave={saveBlock}
         />
       )}
+      <BlockSummarySheet
+        block={summaryOf?.block ?? null}
+        sessions={sessions}
+        exercises={exercises}
+        onClose={() => setSummaryOf(null)}
+        onNext={summaryOf?.offerNext && !block ? () => { const source = summaryOf.block; setSummaryOf(null); setEditor({ initial: nextBlockDraft(source), isNew: true }) } : undefined}
+      />
       <Modal open={confirmEnd} onClose={() => setConfirmEnd(false)} title="Encerrar bloco">
-        <p className="subhead mb-6 text-[var(--muted)]">Suas metas voltam a ser as metas semanais fixas. O histórico de treinos não muda.</p>
+        <p className="subhead mb-6 text-[var(--muted)]">O bloco vai para o histórico com um resumo. Suas metas voltam a ser as metas semanais fixas e o histórico de treinos não muda.</p>
         <div className="flex gap-3">
           <Button variant="secondary" className="flex-1" onClick={() => setConfirmEnd(false)}>Cancelar</Button>
-          <Button variant="danger" className="flex-1" onClick={async () => { await updateProfile({ trainingBlock: null }); setConfirmEnd(false) }}>Encerrar</Button>
+          <Button variant="danger" className="flex-1" onClick={() => void endBlock()}>Encerrar</Button>
         </div>
       </Modal>
     </section>
-  )
-}
-
-function BlockEditor({ initial, defaultSets, onClose, onSave }: {
-  initial: TrainingBlock | null
-  defaultSets: number
-  onClose: () => void
-  onSave: (block: TrainingBlock) => Promise<void>
-}) {
-  const [name, setName] = useState(initial?.name ?? 'Hipertrofia')
-  const [weeks, setWeeks] = useState(String(initial?.weeks ?? 6))
-  const [base, setBase] = useState(initial?.baseWeeklySets ?? defaultSets)
-  const [ramp, setRamp] = useState(String(initial?.weeklyIncreasePct ?? 10))
-  const [deload, setDeload] = useState(initial?.deloadLastWeek ?? true)
-  const [saving, setSaving] = useState(false)
-  const startDate = initial ? new Date(initial.startDate) : nextMonday()
-  const preview = getBlockWeeks({ id: 'preview', name, startDate, weeks: Number(weeks), baseWeeklySets: base, weeklyIncreasePct: Number(ramp), deloadLastWeek: deload })
-
-  return (
-    <Modal open onClose={onClose} title={initial ? 'Editar bloco' : 'Novo bloco'}>
-      <div className="space-y-5">
-        <Input label="Nome" value={name} onChange={(event) => setName(event.target.value)} />
-        <div>
-          <p className="mb-2 px-1 text-[13px] font-semibold text-[var(--muted)]">Duração</p>
-          <SegmentedControl label="Duração" value={weeks} onChange={setWeeks} options={[...WEEK_OPTIONS]} />
-        </div>
-        <label className="block">
-          <span className="mb-2 block px-1 text-[13px] font-semibold text-[var(--muted)]">Séries na semana 1</span>
-          <DecimalInput integer min={1} max={300} value={base} onValueChange={setBase} className="field numeric" />
-        </label>
-        <div>
-          <p className="mb-2 px-1 text-[13px] font-semibold text-[var(--muted)]">Aumento semanal</p>
-          <SegmentedControl label="Aumento semanal" value={ramp} onChange={setRamp} options={[...RAMP_OPTIONS]} />
-        </div>
-        <div className="flex items-center justify-between gap-4 px-1">
-          <span>
-            <span className="block">Deload na última semana</span>
-            <span className="footnote text-[var(--muted)]">Metade do volume para recuperar.</span>
-          </span>
-          <Switch label="Deload na última semana" checked={deload} onChange={setDeload} />
-        </div>
-        <p className="footnote px-1 text-[var(--muted)]">
-          Começa {format(startDate, "EEEE, d 'de' MMM", { locale: ptBR })}. Metas: {preview.map((week) => week.targetSets).join(' → ')} séries.
-        </p>
-        <Button
-          size="lg"
-          className="w-full"
-          disabled={saving || !name.trim() || base <= 0}
-          onClick={async () => {
-            setSaving(true)
-            try {
-              await onSave({
-                id: initial?.id ?? generateId(),
-                name: name.trim(),
-                startDate,
-                weeks: Number(weeks),
-                baseWeeklySets: base,
-                weeklyIncreasePct: Number(ramp),
-                deloadLastWeek: deload,
-              })
-            } finally {
-              setSaving(false)
-            }
-          }}
-        >
-          {initial ? 'Salvar' : 'Começar bloco'}
-        </Button>
-      </div>
-    </Modal>
   )
 }

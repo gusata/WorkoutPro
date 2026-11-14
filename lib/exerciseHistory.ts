@@ -39,12 +39,14 @@ export function getExerciseHistory(
     .filter((session) => session.finishedAt)
     .map((session) => {
       const exercise = session.exercises.find((item) => item.exerciseId === exerciseId)
-      if (!exercise || exercise.sets.length === 0) return null
+      // Warm-up sets never count towards volume or records.
+      const sets = exercise?.sets.filter((set) => (set.setType ?? 'normal') !== 'warmup') ?? []
+      if (!exercise || sets.length === 0) return null
 
-      const volume = exercise.sets.reduce((total, set) => total + set.weight * set.reps, 0)
-      const bestWeight = Math.max(...exercise.sets.map((set) => set.weight))
-      const bestReps = Math.max(...exercise.sets.map((set) => set.reps))
-      const bestEstimatedOneRm = Math.max(...exercise.sets.map((set) => estimateOneRm(set.weight, set.reps)))
+      const volume = sets.reduce((total, set) => total + set.weight * set.reps, 0)
+      const bestWeight = Math.max(...sets.map((set) => set.weight))
+      const bestReps = Math.max(...sets.map((set) => set.reps))
+      const bestEstimatedOneRm = Math.max(...sets.map((set) => estimateOneRm(set.weight, set.reps)))
 
       return {
         sessionId: session.id,
@@ -52,7 +54,7 @@ export function getExerciseHistory(
         workoutName: workoutNames.get(session.workoutId) ?? 'Treino',
         date: new Date(session.finishedAt!),
         duration: session.duration,
-        sets: exercise.sets.length,
+        sets: sets.length,
         volume,
         bestWeight,
         bestReps,

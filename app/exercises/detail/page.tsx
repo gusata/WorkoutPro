@@ -13,6 +13,7 @@ import { StrengthChart } from '@/components/insights/StrengthCard'
 import { VideoModal } from '@/components/training/MediaViewer'
 import { LibraryExerciseInfo } from '@/components/library/LibraryExerciseInfo'
 import { findLibraryMatch } from '@/lib/exerciseLibrary'
+import { DiscomfortHistory } from '@/components/training/DiscomfortHistory'
 import { useProfileStore } from '@/stores/useProfileStore'
 import { useWorkoutStore } from '@/stores/useWorkoutStore'
 import { formatDate, formatDecimal, formatDuration, formatVolume } from '@/lib/utils'
@@ -126,6 +127,8 @@ function ExerciseHistoryContent() {
           </div>
         </section>
       )}
+
+      <DiscomfortHistory exerciseId={exercise.id} sessions={sessions} />
 
       <section aria-labelledby="notes-title" className="stack-section">
         <SectionHeader

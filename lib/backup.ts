@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { generateId, MUSCLE_GROUPS } from '@/lib/utils'
+import { parseDiscomfort } from '@/lib/discomfort'
 import type {
   AchievementRecord,
   BodyMeasurement,
@@ -109,6 +110,13 @@ function parseWorkout(value: unknown, index: number): Workout {
     maxReps: isFiniteNumber(config.maxReps) ? config.maxReps : 12,
     restSeconds: isFiniteNumber(config.restSeconds) ? config.restSeconds : 90,
     supersetId: isString(config.supersetId) ? config.supersetId : null,
+    ...(isRecord(config.progression) && isFiniteNumber(config.progression.increment) ? {
+      progression: {
+        type: 'double-progression' as const,
+        increment: config.progression.increment,
+        minimumRir: isFiniteNumber(config.progression.minimumRir) ? config.progression.minimumRir : 1,
+      },
+    } : {}),
   })) : []
   return {
     id: requireString(value.id, `workouts[${index}].id`),
@@ -172,7 +180,9 @@ function parseSession(value: unknown, index: number): WorkoutSession {
     : parseDate(value.finishedAt, `sessions[${index}].finishedAt`)
   const exercises = requireArray(value.exercises, `sessions[${index}].exercises`).map((exercise, exerciseIndex) => {
     if (!isRecord(exercise)) throw new Error(`Exercicio de sessao invalido em sessions[${index}]`)
+    const discomfort = parseDiscomfort(exercise.discomfort)
     return {
+      ...(discomfort ? { discomfort } : {}),
       exerciseId: requireString(exercise.exerciseId, `sessions[${index}].exercises[${exerciseIndex}].exerciseId`),
       sets: requireArray(exercise.sets, `sessions[${index}].exercises[${exerciseIndex}].sets`).map((set, setIndex) =>
         parseCompletedSet(set, `sessions[${index}].exercises[${exerciseIndex}].sets[${setIndex}]`)
@@ -230,6 +240,12 @@ function parsePreferences(value: unknown): UserPreferences {
     maxHeartRate: isFiniteNumber(value.maxHeartRate) ? value.maxHeartRate : undefined,
     recoveryHeartRate: isFiniteNumber(value.recoveryHeartRate) ? value.recoveryHeartRate : undefined,
     muscleTargets: parseMuscleTargets(value.muscleTargets),
+    ...(Array.isArray(value.autoWarmupExerciseIds) ? { autoWarmupExerciseIds: value.autoWarmupExerciseIds.filter(isString) } : {}),
+    ...(Array.isArray(value.trainingBlockHistory) ? {
+      trainingBlockHistory: value.trainingBlockHistory
+        .map((block, index) => parseTrainingBlock(block, `profile.preferences.trainingBlockHistory[${index}]`))
+        .filter((block): block is TrainingBlock => block !== null),
+    } : {}),
   }
 }
 
@@ -243,16 +259,23 @@ function parseMuscleTargets(value: unknown): UserPreferences['muscleTargets'] {
   return result
 }
 
-function parseTrainingBlock(value: unknown): TrainingBlock | null {
+
+const TRAINING_GOALS = ['hipertrofia', 'forca', 'condicionamento'] as const
+
+function parseTrainingBlock(value: unknown, path = 'profile.trainingBlock'): TrainingBlock | null {
   if (!isRecord(value)) return null
+  const goal = TRAINING_GOALS.find((item) => item === value.goal)
   return {
-    id: requireString(value.id, 'profile.trainingBlock.id'),
-    name: requireString(value.name, 'profile.trainingBlock.name'),
-    startDate: parseDate(value.startDate, 'profile.trainingBlock.startDate'),
+    id: requireString(value.id, `${path}.id`),
+    name: requireString(value.name, `${path}.name`),
+    startDate: parseDate(value.startDate, `${path}.startDate`),
     weeks: positive(value.weeks, 6),
     baseWeeklySets: positive(value.baseWeeklySets, 60),
     weeklyIncreasePct: isFiniteNumber(value.weeklyIncreasePct) ? value.weeklyIncreasePct : 10,
     deloadLastWeek: value.deloadLastWeek !== false,
+    ...(goal ? { goal } : {}),
+    ...(Array.isArray(value.workoutIds) ? { workoutIds: value.workoutIds.filter(isString) } : {}),
+    ...(value.endedAt != null ? { endedAt: parseDate(value.endedAt, `${path}.endedAt`) } : {}),
   }
 }
 

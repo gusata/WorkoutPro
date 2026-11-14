@@ -1,5 +1,5 @@
 import { differenceInCalendarDays } from 'date-fns'
-import type { TrainingBlock, UserProfile, WeeklyGoals } from '@/types'
+import type { TrainingBlock, UserPreferences, UserProfile, WeeklyGoals } from '@/types'
 
 export const DEFAULT_GOALS: WeeklyGoals = { workouts: 4, minutes: 180, sets: 60 }
 export const DEFAULT_BAR_WEIGHT = 20
@@ -58,4 +58,20 @@ export function getEffectiveGoals(profile: UserProfile | null | undefined, now: 
     if (progress.week) return { ...goals, sets: progress.week.targetSets, fromBlock: true }
   }
   return { ...goals, fromBlock: false }
+}
+
+/** Dates inside blocks come back as strings from JSON (cloud/backups); normalize them. */
+export function reviveTrainingBlock<T extends TrainingBlock | null | undefined>(block: T): T {
+  if (!block) return block
+  return {
+    ...block,
+    startDate: new Date(block.startDate),
+    ...(block.endedAt ? { endedAt: new Date(block.endedAt) } : {}),
+  }
+}
+
+/** Revives the dates of the archived blocks kept in preferences. */
+export function reviveBlockHistory(preferences: UserPreferences): UserPreferences {
+  if (!Array.isArray(preferences.trainingBlockHistory)) return preferences
+  return { ...preferences, trainingBlockHistory: preferences.trainingBlockHistory.map((block) => reviveTrainingBlock(block)) }
 }
