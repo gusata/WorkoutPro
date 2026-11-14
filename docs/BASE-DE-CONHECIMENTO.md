@@ -188,6 +188,8 @@ O dashboard usa o mesmo início de semana. Datas civis de streak são comparadas
 
 O Capacitor reconhece quatro plugins: App, Browser, Local Notifications e Splash Screen. Backup/transferência de dados e tráfego HTTP aberto estão desativados. O ícone adaptativo possui camada monocromática. Release usa R8 e redução de recursos. O lint Android está em 0 erros; os avisos restantes são de recursos gráficos gerados/duplicados e XMLs do template.
 
+Companion Wear OS: módulo `android/wear` (mesmo `applicationId`), `WearBridgePlugin` (Kotlin, `com.workoutpro.app.wear`) e `lib/wearBridge.ts` + `components/layout/WearSync.tsx`. O relógio só envia ações; quem altera a sessão é sempre o celular, pelas ações normais das stores. Detalhes, protocolo e instalação em `docs/WEAR-OS.md`.
+
 ## Rotas
 
 | Rota | Função |

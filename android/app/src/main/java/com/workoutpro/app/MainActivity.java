@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(TimerPlugin.class);
         registerPlugin(HealthChangesPlugin.class);
         registerPlugin(WidgetPlugin.class);
+        registerPlugin(com.workoutpro.app.wear.WearBridgePlugin.class);
         super.onCreate(savedInstanceState);
 
         if (getBridge() != null && getBridge().getWebView() != null) {
