@@ -12,6 +12,7 @@ create table if not exists public.profiles (
   total_workouts integer not null default 0,
   streak integer not null default 0,
   longest_streak integer not null default 0,
+  available_equipment text[] not null default '{}',
   last_workout_date timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -24,6 +25,8 @@ create table if not exists public.workouts (
   color text not null,
   icon text not null,
   exercise_ids text[] not null default '{}',
+  exercise_configs jsonb not null default '[]'::jsonb,
+  scheduled_weekdays integer[] not null default '{}',
   created_at timestamptz not null,
   updated_at timestamptz not null,
   deleted_at timestamptz,
@@ -36,6 +39,9 @@ create table if not exists public.exercises (
   name text not null,
   muscle_group text not null,
   notes text not null default '',
+  equipment text not null default '',
+  machine_settings text not null default '',
+  alternatives text[] not null default '{}',
   created_at timestamptz not null,
   updated_at timestamptz not null default now(),
   deleted_at timestamptz,
@@ -79,6 +85,27 @@ create table if not exists public.body_measurements (
   primary key (user_id, id)
 );
 
+create table if not exists public.cardio_sessions (
+  id text not null,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  activity text not null,
+  started_at timestamptz not null,
+  duration integer not null default 0,
+  distance numeric,
+  calories numeric,
+  avg_heart_rate integer,
+  max_heart_rate integer,
+  zones jsonb,
+  effort integer,
+  source text not null default 'manual',
+  external_id text,
+  source_name text,
+  notes text not null default '',
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz,
+  primary key (user_id, id)
+);
+
 create table if not exists public.achievements (
   id text not null,
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -90,12 +117,20 @@ create table if not exists public.achievements (
 );
 
 alter table public.profiles add column if not exists updated_at timestamptz not null default now();
+alter table public.profiles add column if not exists available_equipment text[] not null default '{}';
+alter table public.profiles add column if not exists preferences jsonb not null default '{}'::jsonb;
+alter table public.profiles add column if not exists training_block jsonb;
 
 alter table public.workouts add column if not exists updated_at timestamptz not null default now();
 alter table public.workouts add column if not exists deleted_at timestamptz;
+alter table public.workouts add column if not exists exercise_configs jsonb not null default '[]'::jsonb;
+alter table public.workouts add column if not exists scheduled_weekdays integer[] not null default '{}';
 
 alter table public.exercises add column if not exists updated_at timestamptz not null default now();
 alter table public.exercises add column if not exists deleted_at timestamptz;
+alter table public.exercises add column if not exists equipment text not null default '';
+alter table public.exercises add column if not exists machine_settings text not null default '';
+alter table public.exercises add column if not exists alternatives text[] not null default '{}';
 
 alter table public.workout_sessions add column if not exists updated_at timestamptz not null default now();
 alter table public.workout_sessions add column if not exists deleted_at timestamptz;
@@ -113,6 +148,7 @@ create index if not exists sessions_user_started_idx on public.workout_sessions 
 create index if not exists sessions_user_updated_idx on public.workout_sessions (user_id, updated_at desc);
 create index if not exists measurements_user_date_idx on public.body_measurements (user_id, date desc);
 create index if not exists achievements_user_updated_idx on public.achievements (user_id, updated_at desc);
+create index if not exists cardio_user_updated_idx on public.cardio_sessions (user_id, updated_at desc);
 
 create or replace function public.touch_updated_at()
 returns trigger
@@ -134,9 +170,24 @@ create trigger touch_workout_sessions_updated_at
 before update on public.workout_sessions
 for each row execute function public.touch_updated_at();
 
+drop trigger if exists touch_workouts_updated_at on public.workouts;
+create trigger touch_workouts_updated_at
+before update on public.workouts
+for each row execute function public.touch_updated_at();
+
+drop trigger if exists touch_exercises_updated_at on public.exercises;
+create trigger touch_exercises_updated_at
+before update on public.exercises
+for each row execute function public.touch_updated_at();
+
 drop trigger if exists touch_body_measurements_updated_at on public.body_measurements;
 create trigger touch_body_measurements_updated_at
 before update on public.body_measurements
+for each row execute function public.touch_updated_at();
+
+drop trigger if exists touch_cardio_sessions_updated_at on public.cardio_sessions;
+create trigger touch_cardio_sessions_updated_at
+before update on public.cardio_sessions
 for each row execute function public.touch_updated_at();
 
 drop trigger if exists touch_achievements_updated_at on public.achievements;
@@ -150,6 +201,7 @@ alter table public.exercises enable row level security;
 alter table public.workout_sessions enable row level security;
 alter table public.body_measurements enable row level security;
 alter table public.achievements enable row level security;
+alter table public.cardio_sessions enable row level security;
 
 drop policy if exists "profiles_select_own" on public.profiles;
 create policy "profiles_select_own" on public.profiles
@@ -181,4 +233,8 @@ for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 drop policy if exists "achievements_all_own" on public.achievements;
 create policy "achievements_all_own" on public.achievements
+for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "cardio_sessions_all_own" on public.cardio_sessions;
+create policy "cardio_sessions_all_own" on public.cardio_sessions
 for all using (auth.uid() = user_id) with check (auth.uid() = user_id);

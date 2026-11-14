@@ -1,58 +1,49 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Moon, Sun } from 'lucide-react'
-import { cn } from '@/lib/cn'
+import { useEffect, useSyncExternalStore } from 'react'
+import {
+  applyTheme, readTheme, readThemePreference, safeStorageRemove, safeStorageSet, systemTheme,
+  THEME_CHANGED_EVENT, THEME_STORAGE_KEY, type Theme, type ThemePreference,
+} from '@/lib/theme'
 
-type Theme = 'light' | 'dark'
+export { THEME_CHANGED_EVENT }
 
-function applyTheme(theme: Theme) {
-  document.documentElement.dataset.theme = theme
-  document.documentElement.style.colorScheme = theme
+function subscribe(onChange: () => void) {
+  window.addEventListener(THEME_CHANGED_EVENT, onChange)
+  return () => window.removeEventListener(THEME_CHANGED_EVENT, onChange)
 }
 
-export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window === 'undefined') {
-      return 'light'
-    }
-
-    const stored = window.localStorage.getItem('workoutpro-theme')
-    return stored === 'dark' || stored === 'light' ? stored : 'light'
-  })
-
-  useEffect(() => {
-    applyTheme(theme)
-    window.localStorage.setItem('workoutpro-theme', theme)
-  }, [theme])
-
-  function toggleTheme() {
-    const next = theme === 'dark' ? 'light' : 'dark'
-    setTheme(next)
-  }
-
-  const Icon = theme === 'dark' ? Sun : Moon
-
-  return (
-    <button
-      type="button"
-      aria-label={theme === 'dark' ? 'Ativar tema claro' : 'Ativar tema escuro'}
-      title={theme === 'dark' ? 'Tema claro' : 'Tema escuro'}
-      onClick={toggleTheme}
-      className={cn(
-        'theme-toggle flex h-11 w-11 items-center justify-center rounded-full transition-colors'
-      )}
-    >
-      <Icon size={18} strokeWidth={2.2} />
-    </button>
-  )
+/** Reads the theme from <html data-theme> (set before paint), so server and client agree on hydration. */
+export function useTheme(): Theme {
+  return useSyncExternalStore(subscribe, readTheme, () => 'light')
 }
 
+/** The stored choice: light, dark or follow the system. */
+export function useThemePreference(): ThemePreference {
+  return useSyncExternalStore(subscribe, readThemePreference, () => 'system')
+}
+
+export function setTheme(preference: ThemePreference) {
+  if (preference === 'system') safeStorageRemove(THEME_STORAGE_KEY)
+  else safeStorageSet(THEME_STORAGE_KEY, preference)
+  const theme = preference === 'system' ? systemTheme() : preference
+  applyTheme(theme)
+  window.dispatchEvent(new CustomEvent<Theme>(THEME_CHANGED_EVENT, { detail: theme }))
+}
+
+/** Syncs the theme-color meta tag and follows OS changes while "Automático" is selected. */
 export function ThemeSync() {
   useEffect(() => {
-    const stored = window.localStorage.getItem('workoutpro-theme')
-    const initial = stored === 'dark' || stored === 'light' ? stored : 'light'
-    applyTheme(initial)
+    applyTheme(readTheme())
+    const media = window.matchMedia?.('(prefers-color-scheme: dark)')
+    if (!media) return
+    const onChange = () => {
+      if (readThemePreference() !== 'system') return
+      applyTheme(systemTheme())
+      window.dispatchEvent(new Event(THEME_CHANGED_EVENT))
+    }
+    media.addEventListener('change', onChange)
+    return () => media.removeEventListener('change', onChange)
   }, [])
 
   return null

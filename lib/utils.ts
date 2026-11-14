@@ -93,3 +93,36 @@ export const WORKOUT_ICONS = [
 ]
 
 export const REST_PRESETS = [30, 45, 60, 90, 120, 180]
+
+/**
+ * Parses user-typed numbers accepting both "22.5" and the pt-BR "22,5".
+ * Returns null for empty/invalid input so callers can keep the previous value.
+ */
+export function parseDecimal(text: string): number | null {
+  const normalized = text.trim().replace(/\s/g, '').replace(',', '.')
+  if (normalized === '' || normalized === '.') return null
+  const value = Number(normalized)
+  return Number.isFinite(value) ? value : null
+}
+
+/** Formats a number for an editable pt-BR field ("22,5", "80"). */
+export function formatDecimal(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return ''
+  return String(Math.round(value * 100) / 100).replace('.', ',')
+}
+
+/**
+ * Icon color that stays legible on a user-picked workout color. White is kept
+ * whenever it reaches the 3:1 non-text contrast minimum (WCAG 1.4.11); light
+ * colors such as yellow, lime or emerald get a near-black glyph instead.
+ */
+export function readableOn(hex: string, minContrast = 3): string {
+  const match = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
+  if (!match) return '#ffffff'
+  const channels = [0, 2, 4].map((offset) => {
+    const value = parseInt(match[1].slice(offset, offset + 2), 16) / 255
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+  })
+  const luminance = 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+  return 1.05 / (luminance + 0.05) >= minContrast ? '#ffffff' : '#111114'
+}

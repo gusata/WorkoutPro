@@ -1,35 +1,45 @@
 'use client'
 
-import { type InputHTMLAttributes, forwardRef } from 'react'
+import { type InputHTMLAttributes, forwardRef, useId } from 'react'
 import { cn } from '@/lib/cn'
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string
   error?: string
+  hint?: string
 }
 
+const labelClass = 'px-1 text-[13px] font-semibold text-[var(--muted)]'
+
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ className, label, error, id, ...props }, ref) => {
+  ({ className, label, error, hint, id, ...props }, ref) => {
+    const generatedId = useId()
+    const inputId = id ?? generatedId
+    const messageId = `${inputId}-message`
     return (
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-2">
         {label && (
-          <label htmlFor={id} className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider">
+          <label htmlFor={inputId} className={labelClass}>
             {label}
           </label>
         )}
         <input
           ref={ref}
-          id={id}
+          id={inputId}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error || hint ? messageId : undefined}
           className={cn(
-            'h-12 w-full rounded-2xl bg-[var(--surface)] border border-[var(--border)] px-4 text-[var(--foreground)] placeholder:text-[var(--muted)] shadow-sm',
-            'focus:outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--accent)_18%,transparent)] focus:bg-[var(--surface)] transition-colors',
-            'text-sm',
-            error && 'border-rose-500/50',
+            'field',
+            error && 'shadow-[inset_0_0_0_2px_var(--danger)]',
             className
           )}
           {...props}
         />
-        {error && <p className="text-xs text-rose-400">{error}</p>}
+        {error ? (
+          <p id={messageId} className="px-1 text-[13px] text-[var(--danger)]">{error}</p>
+        ) : hint ? (
+          <p id={messageId} className="px-1 text-[13px] text-[var(--muted)]">{hint}</p>
+        ) : null}
       </div>
     )
   }
@@ -43,20 +53,20 @@ interface TextAreaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement
 
 export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
   ({ className, label, id, ...props }, ref) => {
+    const generatedId = useId()
+    const inputId = id ?? generatedId
     return (
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-2">
         {label && (
-          <label htmlFor={id} className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider">
+          <label htmlFor={inputId} className={labelClass}>
             {label}
           </label>
         )}
         <textarea
           ref={ref}
-          id={id}
+          id={inputId}
           className={cn(
-            'w-full rounded-2xl bg-[var(--surface)] border border-[var(--border)] px-4 py-3 text-[var(--foreground)] placeholder:text-[var(--muted)] shadow-sm',
-            'focus:outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--accent)_18%,transparent)] focus:bg-[var(--surface)] transition-colors resize-none',
-            'text-sm',
+            'field resize-none py-3',
             className
           )}
           {...props}
@@ -75,20 +85,20 @@ interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
   ({ className, label, id, options, ...props }, ref) => {
+    const generatedId = useId()
+    const inputId = id ?? generatedId
     return (
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-2">
         {label && (
-          <label htmlFor={id} className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider">
+          <label htmlFor={inputId} className={labelClass}>
             {label}
           </label>
         )}
         <select
           ref={ref}
-          id={id}
+          id={inputId}
           className={cn(
-            'h-12 w-full rounded-2xl bg-[var(--surface)] border border-[var(--border)] px-4 text-[var(--foreground)] shadow-sm',
-            'focus:outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--accent)_18%,transparent)] transition-colors',
-            'text-sm appearance-none',
+            'field appearance-none',
             className
           )}
           {...props}

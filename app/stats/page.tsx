@@ -1,411 +1,336 @@
 'use client'
 
-import { type CSSProperties, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import {
-  addMonths,
-  eachDayOfInterval,
-  endOfMonth,
-  endOfWeek,
-  format,
-  isSameDay,
-  isSameMonth,
-  isWithinInterval,
-  startOfMonth,
-  startOfWeek,
-  subMonths,
-  subWeeks,
+  addMonths, eachDayOfInterval, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, isWithinInterval,
+  startOfMonth, startOfWeek, subDays, subMonths, subWeeks, subYears,
 } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { BarChart3, CalendarDays, ChevronLeft, ChevronRight, Clock, Dumbbell, TrendingUp, Weight } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useProfileStore } from '@/stores/useProfileStore'
 import { useWorkoutStore } from '@/stores/useWorkoutStore'
 import { Button } from '@/components/ui/Button'
-import { Card } from '@/components/ui/Card'
+import { SegmentedControl } from '@/components/ui/SegmentedControl'
+import { Hero, LocalNav, SectionHeader } from '@/components/layout/PageHeader'
+import { AchievementIcon } from '@/components/achievements/AchievementIcon'
+import { MuscleMap } from '@/components/insights/MuscleMap'
+import { ConsistencyHeatmap } from '@/components/insights/ConsistencyHeatmap'
+import { StrengthCard } from '@/components/insights/StrengthCard'
 import { formatDuration, formatVolume } from '@/lib/utils'
+import { getMonthWeekBuckets, getStatsInterval, getWeeklyBuckets, type StatsPeriod } from '@/lib/statsPeriods'
+import { comparePeriods } from '@/lib/training'
+import { muscleSetsInRange, setsByDay } from '@/lib/insights'
+import { ACHIEVEMENTS } from '@/lib/achievements'
 
-type Period = 'week' | 'month' | 'year'
-
-const PERIODS: { value: Period; label: string }[] = [
+const PERIODS: { value: StatsPeriod; label: string }[] = [
   { value: 'week', label: 'Semana' },
-  { value: 'month', label: 'Mes' },
+  { value: 'month', label: 'Mês' },
   { value: 'year', label: 'Ano' },
 ]
 
-function MetricCard({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: React.ElementType
-  label: string
-  value: string
-}) {
+function BarChart({ data, format: formatValue }: { data: Array<{ label: string; value: number }>; format: (value: number) => string }) {
+  const max = Math.max(...data.map((item) => item.value), 1)
+  const lastWithValue = data.map((item) => item.value > 0).lastIndexOf(true)
   return (
-    <Card glass className="p-4">
-      <div className="soft-icon mb-3 flex h-9 w-9 items-center justify-center rounded-2xl">
-        <Icon size={16} />
-      </div>
-      <p className="text-2xl font-bold tracking-tight text-[var(--foreground)]">{value}</p>
-      <p className="mt-1 text-xs text-[var(--muted)]">{label}</p>
-    </Card>
-  )
-}
-
-function SimpleBarChart({ data }: { data: Array<{ label: string; volume: number }> }) {
-  const max = Math.max(...data.map((item) => item.volume), 1)
-
-  return (
-    <div className="grid h-44 items-end gap-2" style={{ gridTemplateColumns: `repeat(${data.length}, minmax(0, 1fr))` }}>
-      {data.map((item) => (
-        <div key={item.label} className="flex h-full min-w-0 flex-col justify-end gap-2">
-          <div className="flex min-h-0 flex-1 items-end rounded-xl bg-[var(--surface-2)]/55 px-1">
-            <div
-              className="w-full rounded-t-lg bg-[var(--accent)]"
-              style={{ height: `${Math.max((item.volume / max) * 100, item.volume > 0 ? 8 : 0)}%` }}
-              title={`${item.label}: ${formatVolume(item.volume)}`}
-            />
-          </div>
-          <span className="truncate text-center text-[11px] font-medium text-[var(--muted)]">{item.label}</span>
+    <figure>
+      <figcaption className="sr-only">{data.map((item) => `${item.label}: ${formatValue(item.value)}`).join('; ')}</figcaption>
+      <div aria-hidden className="relative h-44">
+        {[0, 0.5, 1].map((line) => (
+          <div key={line} className="absolute left-0 right-0 border-t border-[var(--separator)] opacity-70" style={{ bottom: `${line * 100}%` }} />
+        ))}
+        <div className="relative z-[1] grid h-full items-end gap-2" style={{ gridTemplateColumns: `repeat(${data.length}, minmax(0, 1fr))` }}>
+          {data.map((item, index) => (
+            <div key={item.label} className="flex h-full items-end justify-center">
+              <div
+                className="w-full max-w-6 rounded-[4px] transition-[height] duration-700"
+                style={{
+                  height: `${item.value > 0 ? Math.max((item.value / max) * 100, 3) : 0}%`,
+                  background: index === lastWithValue ? 'var(--data-1)' : 'color-mix(in srgb, var(--data-1) 38%, var(--fill-strong))',
+                }}
+              />
+            </div>
+          ))}
         </div>
-      ))}
-    </div>
-  )
-}
-
-function SimpleAreaChart({ data }: { data: Array<{ label: string; treinos: number }> }) {
-  const max = Math.max(...data.map((item) => item.treinos), 1)
-  const width = 280
-  const height = 108
-  const step = data.length > 1 ? width / (data.length - 1) : width
-  const points = data.map((item, index) => {
-    const x = index * step
-    const y = height - (item.treinos / max) * (height - 14) - 7
-    return { x, y, ...item }
-  })
-  const line = points.map((point) => `${point.x},${point.y}`).join(' ')
-  const area = `0,${height} ${line} ${width},${height}`
-
-  return (
-    <div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="h-32 w-full overflow-visible" role="img" aria-label="Frequencia de treinos">
-        <polygon points={area} fill="color-mix(in srgb, var(--accent) 16%, transparent)" />
-        <polyline points={line} fill="none" stroke="var(--accent)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-        {points.map((point) => (
-          <circle key={point.label} cx={point.x} cy={point.y} r="4" fill="var(--accent)" />
-        ))}
-      </svg>
-      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${data.length}, minmax(0, 1fr))` } as CSSProperties}>
-        {data.map((item) => (
-          <span key={item.label} className="truncate text-center text-[11px] font-medium text-[var(--muted)]">
-            {item.label}
-          </span>
-        ))}
       </div>
-    </div>
+      <div aria-hidden className="mt-2 grid gap-2" style={{ gridTemplateColumns: `repeat(${data.length}, minmax(0, 1fr))` }}>
+        {data.map((item) => <span key={item.label} className="caption truncate text-center capitalize text-[var(--muted)]">{item.label.replace('.', '')}</span>)}
+      </div>
+    </figure>
   )
 }
 
 export default function StatsPage() {
-  const { sessions } = useProfileStore()
-  const { workouts, exercises } = useWorkoutStore()
-  const [period, setPeriod] = useState<Period>('month')
+  const sessions = useProfileStore((state) => state.sessions)
+  const achievements = useProfileStore((state) => state.achievements)
+  const longestStreak = useProfileStore((state) => state.profile?.longestStreak ?? 0)
+  const workouts = useWorkoutStore((state) => state.workouts)
+  const exercises = useWorkoutStore((state) => state.exercises)
+  const [now] = useState(() => new Date())
+  const [period, setPeriod] = useState<StatsPeriod>('month')
+  const [chartMode, setChartMode] = useState<'volume' | 'frequency'>('volume')
+  const [muscleRange, setMuscleRange] = useState<'7' | '30'>('7')
   const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()))
   const [selectedDate, setSelectedDate] = useState(() => new Date())
 
+  const finished = useMemo(() => sessions.filter((session) => session.finishedAt), [sessions])
   const filteredSessions = useMemo(() => {
-    const now = new Date()
-    if (period === 'week') {
-      const start = startOfWeek(now, { weekStartsOn: 1 })
-      return sessions.filter((session) => session.finishedAt && new Date(session.finishedAt) >= start)
-    }
-    if (period === 'month') {
-      return sessions.filter((session) => session.finishedAt && new Date(session.finishedAt) >= subMonths(now, 1))
-    }
-    return sessions.filter((session) => session.finishedAt && new Date(session.finishedAt) >= subMonths(now, 12))
-  }, [period, sessions])
+    const interval = getStatsInterval(period, now)
+    return finished.filter((session) => isWithinInterval(new Date(session.finishedAt!), interval))
+  }, [finished, now, period])
 
   const sessionsByDay = useMemo(() => {
     const map = new Map<string, typeof sessions>()
-    sessions.forEach((session) => {
-      if (!session.finishedAt) return
-      const key = format(new Date(session.finishedAt), 'yyyy-MM-dd')
+    finished.forEach((session) => {
+      const key = format(new Date(session.finishedAt!), 'yyyy-MM-dd')
       map.set(key, [...(map.get(key) ?? []), session])
     })
     return map
-  }, [sessions])
+  }, [finished])
+  const dailySets = useMemo(() => setsByDay(sessions), [sessions])
+  const muscles = useMemo(() => muscleSetsInRange(sessions, exercises, subDays(now, Number(muscleRange)), now), [exercises, muscleRange, now, sessions])
+  const muscleScale = useMemo(() => {
+    // Normalise 30 days to a weekly average so the same color scale applies.
+    if (muscleRange === '7') return muscles
+    return new Map([...muscles].map(([group, sets]) => [group, (sets / 30) * 7]))
+  }, [muscleRange, muscles])
 
-  const selectedSessions = useMemo(() => {
-    const key = format(selectedDate, 'yyyy-MM-dd')
-    return sessionsByDay.get(key) ?? []
-  }, [selectedDate, sessionsByDay])
+  const selectedSessions = sessionsByDay.get(format(selectedDate, 'yyyy-MM-dd')) ?? []
   const workoutNames = useMemo(() => new Map(workouts.map((workout) => [workout.id, workout.name])), [workouts])
   const exerciseNames = useMemo(() => new Map(exercises.map((exercise) => [exercise.id, exercise.name])), [exercises])
 
   const calendarDays = useMemo(() => {
-    const start = startOfWeek(startOfMonth(calendarMonth), { weekStartsOn: 0 })
-    const end = endOfWeek(endOfMonth(calendarMonth), { weekStartsOn: 0 })
+    const start = startOfWeek(startOfMonth(calendarMonth), { weekStartsOn: 1 })
+    const end = endOfWeek(endOfMonth(calendarMonth), { weekStartsOn: 1 })
     return eachDayOfInterval({ start, end })
   }, [calendarMonth])
 
-  const volumeChartData = useMemo(() => {
-    const now = new Date()
-    if (period === 'week') {
-      const days = eachDayOfInterval({
-        start: startOfWeek(now, { weekStartsOn: 1 }),
-        end: endOfWeek(now, { weekStartsOn: 1 }),
-      })
-      return days.map((day) => ({
-        label: format(day, 'EEE', { locale: ptBR }),
-        volume: sessions
-          .filter((session) => session.finishedAt && isSameDay(new Date(session.finishedAt), day))
-          .reduce((total, session) => total + session.totalVolume, 0),
+  const chartData = useMemo(() => {
+    const volumeIn = (predicate: (date: Date) => boolean) => finished
+      .filter((session) => predicate(new Date(session.finishedAt!)))
+      .reduce((total, session) => total + session.totalVolume, 0)
+    if (chartMode === 'frequency') {
+      return getWeeklyBuckets(8, now).map(({ start, end }, index) => ({
+        label: `S${index + 1}`,
+        value: finished.filter((session) => isWithinInterval(new Date(session.finishedAt!), { start, end })).length,
       }))
     }
-
-    if (period === 'month') {
-      return Array.from({ length: 4 }, (_, index) => {
-        const start = subWeeks(now, 3 - index)
-        const end = endOfWeek(start, { weekStartsOn: 1 })
-        return {
-          label: `S${index + 1}`,
-          volume: sessions
-            .filter((session) => session.finishedAt && isWithinInterval(new Date(session.finishedAt), { start, end }))
-            .reduce((total, session) => total + session.totalVolume, 0),
-        }
-      })
+    if (period === 'week') {
+      return eachDayOfInterval({ start: startOfWeek(now, { weekStartsOn: 1 }), end: endOfWeek(now, { weekStartsOn: 1 }) })
+        .map((day) => ({ label: format(day, 'EEEEE', { locale: ptBR }), value: volumeIn((date) => isSameDay(date, day)) }))
     }
-
+    if (period === 'month') {
+      return getMonthWeekBuckets(now).map(({ start, end }, index) => ({ label: `S${index + 1}`, value: volumeIn((date) => isWithinInterval(date, { start, end })) }))
+    }
     return Array.from({ length: 12 }, (_, index) => {
       const month = subMonths(now, 11 - index)
-      return {
-        label: format(month, 'MMM', { locale: ptBR }),
-        volume: sessions
-          .filter((session) => session.finishedAt && isSameMonth(new Date(session.finishedAt), month))
-          .reduce((total, session) => total + session.totalVolume, 0),
-      }
+      return { label: format(month, 'MMMMM', { locale: ptBR }), value: volumeIn((date) => isSameMonth(date, month)) }
     })
-  }, [period, sessions])
-
-  const frequencyData = useMemo(
-    () =>
-      Array.from({ length: 8 }, (_, index) => {
-        const start = subWeeks(new Date(), 7 - index)
-        const end = endOfWeek(start, { weekStartsOn: 1 })
-        return {
-          label: `S${index + 1}`,
-          treinos: sessions.filter(
-            (session) => session.finishedAt && isWithinInterval(new Date(session.finishedAt), { start, end })
-          ).length,
-        }
-      }),
-    [sessions]
-  )
+  }, [chartMode, finished, now, period])
 
   const totalVolume = filteredSessions.reduce((total, session) => total + session.totalVolume, 0)
   const totalTime = filteredSessions.reduce((total, session) => total + session.duration, 0)
-  const allTimeVolume = sessions.reduce((total, session) => total + session.totalVolume, 0)
+  const allTimeVolume = finished.reduce((total, session) => total + session.totalVolume, 0)
+  const previousReference = period === 'week' ? subWeeks(now, 1) : period === 'month' ? subMonths(now, 1) : subYears(now, 1)
+  const previousSessions = finished.filter((session) => isWithinInterval(new Date(session.finishedAt!), getStatsInterval(period, previousReference)))
+  const previousVolume = previousSessions.reduce((total, session) => total + session.totalVolume, 0)
+  const volumeChange = comparePeriods(totalVolume, previousVolume)
+  const unlockedIds = new Set(achievements.map((item) => item.id))
+  const nextAchievements = ACHIEVEMENTS.filter((item) => !unlockedIds.has(item.id)).slice(0, 3)
+  const periodLabel = period === 'week' ? 'nesta semana' : period === 'month' ? 'neste mês' : 'neste ano'
+  const previousLabel = period === 'week' ? 'na semana passada' : period === 'month' ? 'no mês passado' : 'no ano passado'
+  const activeDays26 = [...dailySets.keys()].filter((key) => new Date(key) >= subWeeks(now, 26)).length
+
+  const lede = filteredSessions.length === 0
+    ? `Nenhum treino ${periodLabel} ainda.`
+    : previousVolume <= 0
+      ? `${formatVolume(totalVolume)} levantados ${periodLabel}.`
+      : `Volume ${Math.abs(volumeChange)}% ${volumeChange >= 0 ? 'acima' : 'abaixo'} do registrado ${previousLabel}.`
 
   return (
-    <div className="apple-page page-content space-y-5 pb-28">
-      <header>
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">Performance</p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight text-[var(--foreground)]">Estatisticas</h1>
-      </header>
+    <div className="apple-page page-content">
+      <LocalNav title="Progresso" actions={<Link href={`/recap?month=${format(subMonths(now, now.getDate() <= 7 ? 1 : 0), 'yyyy-MM')}`} className="pill">Retrospectiva</Link>} />
 
-      <div
-        className="grid grid-cols-3 gap-1 rounded-xl p-1"
-        style={{ background: 'var(--glass-strong)', border: '1px solid var(--border)' }}
-      >
-        {PERIODS.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            onClick={() => setPeriod(item.value)}
-            className="h-10 rounded-lg text-sm font-bold transition"
-            style={
-              period === item.value
-                ? { background: 'var(--accent)', color: 'white' }
-                : { color: 'var(--muted)' }
-            }
-          >
-            {item.label}
-          </button>
-        ))}
+      <Hero eyebrow="Tendências" title="Progresso." lede={lede} />
+
+      <div className="mt-8">
+        <SegmentedControl label="Período" value={period} onChange={setPeriod} options={PERIODS} />
       </div>
 
-      <section className="grid grid-cols-3 gap-3">
-        <MetricCard icon={Dumbbell} label="Treinos" value={`${filteredSessions.length}`} />
-        <MetricCard icon={Weight} label="Volume" value={formatVolume(totalVolume)} />
-        <MetricCard icon={Clock} label="Tempo" value={formatDuration(totalTime)} />
+      <section className="tile mt-4 grid grid-cols-3 gap-2 !px-5" aria-label="Resumo do período">
+        {[
+          { label: 'Treinos', value: `${filteredSessions.length}` },
+          { label: 'Volume', value: formatVolume(totalVolume) },
+          { label: 'Tempo', value: formatDuration(totalTime) },
+        ].map(({ label, value }) => (
+          <div key={label} className="min-w-0">
+            <p className="footnote text-[var(--muted)]">{label}</p>
+            <p className="stat mt-1 truncate text-[22px]">{value}</p>
+          </div>
+        ))}
       </section>
 
-      <Card glass className="p-4">
-        <div className="mb-4 flex items-center gap-2">
-          <TrendingUp size={16} className="text-[var(--accent)]" />
-          <h2 className="apple-section-title">Volume</h2>
-        </div>
-        <SimpleBarChart data={volumeChartData} />
-      </Card>
-
-      <Card glass className="p-4">
-        <div className="mb-4 flex items-center gap-2">
-          <BarChart3 size={16} className="text-[var(--accent)]" />
-          <h2 className="apple-section-title">Frequencia</h2>
-        </div>
-        <SimpleAreaChart data={frequencyData} />
-      </Card>
-
-      <Card glass className="p-4">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <CalendarDays size={16} className="text-[var(--accent)]" />
-            <h2 className="apple-section-title">Calendario</h2>
-          </div>
-          <div className="flex items-center gap-1">
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8"
-              onClick={() => setCalendarMonth((month) => subMonths(month, 1))}
-              aria-label="Mes anterior"
-            >
-              <ChevronLeft size={16} />
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8"
-              onClick={() => setCalendarMonth((month) => addMonths(month, 1))}
-              aria-label="Proximo mes"
-            >
-              <ChevronRight size={16} />
-            </Button>
-          </div>
-        </div>
-
-        <p className="mb-4 text-sm font-bold capitalize text-[var(--foreground)]">
-          {format(calendarMonth, 'MMMM yyyy', { locale: ptBR })}
-        </p>
-
-        <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-[var(--muted)]">
-          {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((day, index) => (
-            <span key={`${day}-${index}`} className="py-1">
-              {day}
-            </span>
-          ))}
-        </div>
-
-        <div className="mt-1 grid grid-cols-7 gap-1">
-          {calendarDays.map((day) => {
-            const key = format(day, 'yyyy-MM-dd')
-            const count = sessionsByDay.get(key)?.length ?? 0
-            const selected = isSameDay(day, selectedDate)
-            const inMonth = isSameMonth(day, calendarMonth)
-
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setSelectedDate(day)}
-                className="relative aspect-square rounded-2xl text-sm font-bold transition-colors"
-                style={{
-                  color: selected ? 'white' : inMonth ? 'var(--foreground)' : 'var(--muted)',
-                  background: selected
-                    ? 'var(--accent)'
-                    : count > 0
-                      ? 'color-mix(in srgb, var(--accent) 14%, transparent)'
-                      : 'color-mix(in srgb, var(--surface-2) 70%, transparent)',
-                  opacity: inMonth ? 1 : 0.45,
-                }}
-              >
-                {format(day, 'd')}
-                {count > 0 && (
-                  <span
-                    className="absolute bottom-1 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full"
-                    style={{ background: selected ? 'white' : 'var(--accent)' }}
-                  />
-                )}
-              </button>
-            )
-          })}
-        </div>
-
-        <div className="mt-4 rounded-2xl bg-[var(--surface-2)]/70 p-3">
-          <p className="text-xs font-bold text-[var(--muted)]">
-            {format(selectedDate, "d 'de' MMMM", { locale: ptBR })}
+      <section aria-labelledby="chart-title" className="stack-section">
+        <SectionHeader id="chart-title" title="Evolução." />
+        <div className="tile">
+          <SegmentedControl
+            label="Métrica do gráfico"
+            value={chartMode}
+            onChange={setChartMode}
+            options={[{ value: 'volume', label: 'Volume' }, { value: 'frequency', label: 'Frequência' }]}
+          />
+          <p className="subhead mt-6 text-[var(--muted)]">{chartMode === 'volume' ? `Volume ${periodLabel}` : 'Treinos por semana · 8 semanas'}</p>
+          <p className="stat mb-5 mt-1 text-[36px]">
+            {chartMode === 'volume' ? formatVolume(totalVolume) : chartData.reduce((total, item) => total + item.value, 0)}
+            {chartMode === 'frequency' && <span className="stat-unit">treinos</span>}
           </p>
-          {selectedSessions.length > 0 ? (
-            <div className="mt-3 space-y-3">
-              {selectedSessions.map((session) => {
-                const setCount = session.exercises.reduce((total, exercise) => total + exercise.sets.length, 0)
-                const exerciseList = session.exercises
-                  .map((exercise) => exerciseNames.get(exercise.exerciseId))
-                  .filter(Boolean)
-                  .slice(0, 4)
-                  .join(', ')
+          <BarChart data={chartData} format={chartMode === 'volume' ? formatVolume : (value) => `${value} treinos`} />
+        </div>
+      </section>
 
-                return (
-                  <div key={session.id} className="rounded-2xl bg-[var(--surface)] p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-bold text-[var(--foreground)]">
-                          {workoutNames.get(session.workoutId) ?? 'Treino'}
-                        </p>
-                        <p className="mt-0.5 text-xs text-[var(--muted)]">
-                          {setCount} series - {formatDuration(session.duration)}
-                        </p>
+      <section aria-labelledby="strength-title" className="stack-section">
+        <SectionHeader id="strength-title" title="Força." subtitle="1RM estimado por exercício, com tendência." />
+        <StrengthCard exercises={exercises} sessions={sessions} workouts={workouts} />
+      </section>
+
+      <section id="musculos" aria-labelledby="muscles-title" className="stack-section scroll-mt-20">
+        <SectionHeader id="muscles-title" title="Músculos." subtitle={muscleRange === '7' ? 'Séries de trabalho nos últimos 7 dias.' : 'Média semanal dos últimos 30 dias.'} />
+        <div className="tile">
+          <SegmentedControl label="Intervalo do mapa muscular" value={muscleRange} onChange={setMuscleRange} options={[{ value: '7', label: '7 dias' }, { value: '30', label: '30 dias' }]} className="mb-7" />
+          <MuscleMap sets={muscleScale} />
+          <p className="footnote mt-4 text-[var(--muted)]">Faixa de referência para hipertrofia: 10 a 20 séries por músculo por semana.</p>
+        </div>
+      </section>
+
+      <section aria-labelledby="consistency-title" className="stack-section">
+        <SectionHeader id="consistency-title" title="Consistência." subtitle="Últimas 26 semanas." />
+        <div className="tile">
+          <div className="mb-6 grid grid-cols-2 gap-4">
+            <div><p className="footnote text-[var(--muted)]">Dias ativos</p><p className="stat mt-1 text-[28px]">{activeDays26}</p></div>
+            <div><p className="footnote text-[var(--muted)]">Maior sequência</p><p className="stat mt-1 text-[28px]">{longestStreak}<span className="stat-unit">{longestStreak === 1 ? 'dia' : 'dias'}</span></p></div>
+          </div>
+          <ConsistencyHeatmap setsByDay={dailySets} now={now} />
+        </div>
+      </section>
+
+      <section aria-labelledby="calendar-title" className="stack-section">
+        <SectionHeader
+          id="calendar-title"
+          title="Histórico."
+          action={(
+            <div className="-mb-1 -mr-2 flex items-center">
+              <Button size="icon" variant="ghost" onClick={() => setCalendarMonth((month) => subMonths(month, 1))} aria-label="Mês anterior"><ChevronLeft size={22} aria-hidden /></Button>
+              <Button size="icon" variant="ghost" onClick={() => setCalendarMonth((month) => addMonths(month, 1))} aria-label="Próximo mês"><ChevronRight size={22} aria-hidden /></Button>
+            </div>
+          )}
+        />
+        <div className="tile">
+          <p className="title-3 mb-4 capitalize" aria-live="polite">{format(calendarMonth, 'MMMM yyyy', { locale: ptBR })}</p>
+          <div aria-hidden className="caption grid grid-cols-7 text-center font-semibold text-[var(--muted)]">
+            {['S', 'T', 'Q', 'Q', 'S', 'S', 'D'].map((day, index) => <span key={`${day}-${index}`} className="py-1">{day}</span>)}
+          </div>
+          <div className="mt-1 grid grid-cols-7 gap-y-1">
+            {calendarDays.map((day) => {
+              const key = format(day, 'yyyy-MM-dd')
+              const count = sessionsByDay.get(key)?.length ?? 0
+              const selected = isSameDay(day, selectedDate)
+              const inMonth = isSameMonth(day, calendarMonth)
+              const today = isSameDay(day, now)
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={selected}
+                  aria-label={`${format(day, "d 'de' MMMM", { locale: ptBR })}${count > 0 ? `, ${count} treino${count > 1 ? 's' : ''}` : ''}`}
+                  onClick={() => setSelectedDate(day)}
+                  className="flex h-12 flex-col items-center justify-center gap-1"
+                  style={{ opacity: inMonth ? 1 : 0.3 }}
+                >
+                  <span className={`numeric flex h-8 w-8 items-center justify-center rounded-full text-[16px] ${selected ? 'bg-[var(--foreground)] font-semibold text-[var(--background-elevated)]' : today ? 'font-semibold text-[var(--accent)]' : ''}`}>
+                    {format(day, 'd')}
+                  </span>
+                  <span aria-hidden className={`h-1 w-1 rounded-full ${count > 0 ? 'bg-[var(--data-1)]' : 'bg-transparent'}`} />
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="mt-5 border-t border-[var(--separator)] pt-5" aria-live="polite">
+            <p className="footnote font-semibold text-[var(--muted)]">{format(selectedDate, "EEEE, d 'de' MMMM", { locale: ptBR }).replace(/^./, (c) => c.toUpperCase())}</p>
+            {selectedSessions.length > 0 ? (
+              <ul className="mt-3 space-y-4">
+                {selectedSessions.map((session) => {
+                  const setTotal = session.exercises.reduce((total, exercise) => total + exercise.sets.length, 0)
+                  const exerciseList = session.exercises.map((exercise) => exerciseNames.get(exercise.exerciseId)).filter(Boolean).slice(0, 4).join(', ')
+                  return (
+                    <li key={session.id}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="headline truncate">{workoutNames.get(session.workoutId) ?? 'Treino'}</p>
+                          <p className="footnote numeric mt-0.5 text-[var(--muted)]">{setTotal} séries · {formatDuration(session.duration)}</p>
+                        </div>
+                        <span className="stat flex-none text-[20px]">{formatVolume(session.totalVolume)}</span>
                       </div>
-                      <span className="flex-none text-sm font-bold text-[var(--accent)]">
-                        {formatVolume(session.totalVolume)}
-                      </span>
-                    </div>
-                    {exerciseList && (
-                      <p className="mt-2 line-clamp-2 text-xs text-[var(--muted)]">{exerciseList}</p>
-                    )}
-                  </div>
-                )
-              })}
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-2xl bg-[var(--surface)] p-2">
-                  <p className="text-sm font-bold text-[var(--foreground)]">{selectedSessions.length}</p>
-                  <p className="text-[10px] text-[var(--muted)]">treinos</p>
-                </div>
-                <div className="rounded-2xl bg-[var(--surface)] p-2">
-                  <p className="text-sm font-bold text-[var(--foreground)]">
-                    {formatVolume(selectedSessions.reduce((total, session) => total + session.totalVolume, 0))}
-                  </p>
-                  <p className="text-[10px] text-[var(--muted)]">volume</p>
-                </div>
-                <div className="rounded-2xl bg-[var(--surface)] p-2">
-                  <p className="text-sm font-bold text-[var(--foreground)]">
-                    {formatDuration(selectedSessions.reduce((total, session) => total + session.duration, 0))}
-                  </p>
-                  <p className="text-[10px] text-[var(--muted)]">tempo</p>
-                </div>
+                      {exerciseList && <p className="footnote mt-1 line-clamp-2 text-[var(--muted)]">{exerciseList}</p>}
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : (
+              <p className="subhead mt-2 text-[var(--muted)]">Nenhum treino neste dia.</p>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="recap-title" className="stack-section">
+        <h2 id="recap-title" className="sr-only">Retrospectivas</h2>
+        <div className="grid grid-cols-2 gap-3">
+          <Link href={`/recap?month=${format(subMonths(now, 1), 'yyyy-MM')}`} className="tile tile-dark tile-link tile-compact block min-h-[150px]">
+            <p className="eyebrow !text-[#ff8a3d]">Retrospectiva</p>
+            <p className="title-3 mt-1 capitalize text-[#f5f5f7]">{format(subMonths(now, 1), 'MMMM', { locale: ptBR })}</p>
+            <ChevronRight size={20} className="absolute bottom-5 right-5 text-[#2997ff]" aria-hidden />
+          </Link>
+          <Link href={`/recap?year=${now.getFullYear()}`} className="tile tile-dark tile-link tile-compact block min-h-[150px]">
+            <p className="eyebrow !text-[#ff8a3d]">Seu ano</p>
+            <p className="title-3 mt-1 text-[#f5f5f7]">{now.getFullYear()}</p>
+            <ChevronRight size={20} className="absolute bottom-5 right-5 text-[#2997ff]" aria-hidden />
+          </Link>
+        </div>
+      </section>
+
+      <section aria-labelledby="awards-title" className="stack-section">
+        <SectionHeader id="awards-title" title="Prêmios." action={<Link href="/achievements" className="link -mb-2.5 text-[17px]">{unlockedIds.size} de {ACHIEVEMENTS.length}<ChevronRight size={17} aria-hidden /></Link>} />
+        <div className="list">
+          {nextAchievements.map((achievement) => (
+            <div key={achievement.id} className="grouped-row sep-inset-72 flex items-center gap-4 px-5 py-3.5">
+              <AchievementIcon icon={achievement.icon} color={achievement.color} size={20} className="h-11 w-11 rounded-full" />
+              <div className="min-w-0 flex-1">
+                <p className="headline">{achievement.title}</p>
+                <p className="footnote text-[var(--muted)]">{achievement.description}</p>
               </div>
             </div>
-          ) : (
-            <p className="mt-2 text-sm text-[var(--muted)]">Nenhum treino registrado nesse dia.</p>
-          )}
+          ))}
+          {nextAchievements.length === 0 && <p className="subhead p-6 text-center text-[var(--muted)]">Todos os prêmios foram conquistados.</p>}
         </div>
-      </Card>
+      </section>
 
-      <Card glass className="p-4">
-        <h2 className="apple-section-title">Todos os tempos</h2>
-        <div className="mt-3 divide-y divide-[var(--border)]">
+      <section aria-labelledby="alltime-title" className="stack-section">
+        <p id="alltime-title" className="list-header">Todos os tempos</p>
+        <dl className="list">
           {[
-            { label: 'Total de treinos', value: `${sessions.length}` },
+            { label: 'Treinos', value: `${finished.length}` },
             { label: 'Volume total', value: formatVolume(allTimeVolume) },
-            { label: 'Tempo total', value: formatDuration(sessions.reduce((total, session) => total + session.duration, 0)) },
-            { label: 'Media por treino', value: sessions.length > 0 ? formatVolume(allTimeVolume / sessions.length) : '-' },
+            { label: 'Tempo total', value: formatDuration(finished.reduce((total, session) => total + session.duration, 0)) },
+            { label: 'Média por treino', value: finished.length > 0 ? formatVolume(allTimeVolume / finished.length) : '—' },
           ].map((item) => (
-            <div key={item.label} className="flex items-center justify-between py-3 text-sm">
-              <span className="text-[var(--muted)]">{item.label}</span>
-              <span className="font-bold text-[var(--foreground)]">{item.value}</span>
+            <div key={item.label} className="grouped-row flex min-h-12 items-center justify-between px-5 py-3">
+              <dt>{item.label}</dt>
+              <dd className="numeric text-[var(--muted)]">{item.value}</dd>
             </div>
           ))}
-        </div>
-      </Card>
+        </dl>
+      </section>
     </div>
   )
 }

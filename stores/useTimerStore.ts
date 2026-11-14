@@ -10,10 +10,12 @@ interface TimerStore {
   restTotal: number
   restRunning: boolean
   restEndAt: number | null
-  startWorkoutTimer: () => void
+  startWorkoutTimer: (startedAt?: number) => void
   stopWorkoutTimer: () => void
   resetWorkoutTimer: () => void
   startRest: (seconds: number) => void
+  /** Adds (or removes, when negative) time to the running rest without restarting it. */
+  extendRest: (seconds: number) => void
   stopRest: () => void
   tickWorkout: () => void
   tickRest: () => void
@@ -22,28 +24,34 @@ interface TimerStore {
 // Dynamic imports so @capacitor/core is never evaluated at module level.
 // This prevents crashes in Turbopack dev mode and avoids SSR side-effects.
 
+function reportNativeError(message: string) {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('workoutpro:native-error', { detail: message }))
+  }
+}
+
 function fireStartWorkout(workoutStartedAt: number) {
   if (typeof window === 'undefined') return
   import('@/lib/timerPlugin')
     .then(({ TimerPlugin }) => TimerPlugin.startWorkout({ workoutStartedAt }))
-    .catch(() => {})
+    .catch(() => reportNativeError('O timer nativo nao iniciou. O cronometro do app continua funcionando.'))
 }
 
 function fireStopWorkout() {
   if (typeof window === 'undefined') return
   import('@/lib/timerPlugin')
     .then(({ TimerPlugin }) => TimerPlugin.stopWorkout())
-    .catch(() => {})
+    .catch(() => reportNativeError('O servico nativo do timer nao pode ser encerrado.'))
 }
 
 function fireStartRest(seconds: number, workoutStartedAt: number) {
   if (typeof window === 'undefined') return
   import('@/lib/notifications')
     .then(({ scheduleRestEndNotification }) => scheduleRestEndNotification(seconds))
-    .catch(() => {})
+    .catch(() => reportNativeError('Nao foi possivel agendar o aviso de descanso.'))
   import('@/lib/timerPlugin')
     .then(({ TimerPlugin }) => TimerPlugin.startTimer({ seconds, workoutStartedAt }))
-    .catch(() => {})
+    .catch(() => reportNativeError('O descanso nao apareceu na notificacao do sistema.'))
 }
 
 // Called only when the user MANUALLY cancels rest (X button).
@@ -53,10 +61,10 @@ function fireCancelRest() {
   if (typeof window === 'undefined') return
   import('@/lib/notifications')
     .then(({ cancelRestNotification }) => cancelRestNotification())
-    .catch(() => {})
+    .catch(() => reportNativeError('Nao foi possivel cancelar o aviso de descanso.'))
   import('@/lib/timerPlugin')
     .then(({ TimerPlugin }) => TimerPlugin.stopTimer())
-    .catch(() => {})
+    .catch(() => reportNativeError('Nao foi possivel atualizar o servico nativo de descanso.'))
 }
 
 export const useTimerStore = create<TimerStore>((set, get) => ({
@@ -68,19 +76,32 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
   restRunning: false,
   restEndAt: null,
 
-  startWorkoutTimer: () => {
+  startWorkoutTimer: (requestedStartedAt) => {
     // Only record the start time once — don't reset if already running.
     const existing = get().workoutStartedAt
-    const startedAt = existing ?? Date.now()
-    set({ workoutRunning: true, workoutStartedAt: startedAt })
+    const startedAt = requestedStartedAt ?? existing ?? Date.now()
+    set({
+      workoutRunning: true,
+      workoutStartedAt: startedAt,
+      workoutSeconds: Math.max(0, Math.floor((Date.now() - startedAt) / 1000)),
+    })
     // Start the foreground service notification on first call only.
-    if (!existing) fireStartWorkout(startedAt)
+    if (!existing || existing !== startedAt) fireStartWorkout(startedAt)
   },
 
   stopWorkoutTimer: () => set({ workoutRunning: false }),
 
   resetWorkoutTimer: () => {
-    set({ workoutSeconds: 0, workoutRunning: false, workoutStartedAt: null })
+    set({
+      workoutSeconds: 0,
+      workoutRunning: false,
+      workoutStartedAt: null,
+      restSeconds: 0,
+      restTotal: 0,
+      restRunning: false,
+      restEndAt: null,
+    })
+    fireCancelRest()
     fireStopWorkout()
   },
 
@@ -89,6 +110,16 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
     const endAt = Date.now() + seconds * 1000
     set({ restSeconds: seconds, restTotal: seconds, restRunning: true, restEndAt: endAt })
     fireStartRest(seconds, workoutStartedAt)
+  },
+
+  extendRest: (extra) => {
+    const { restRunning, restEndAt, restTotal, workoutStartedAt } = get()
+    if (!restRunning || restEndAt == null) return
+    const endAt = Math.max(Date.now() + 1000, restEndAt + extra * 1000)
+    const remaining = Math.ceil((endAt - Date.now()) / 1000)
+    set({ restEndAt: endAt, restSeconds: remaining, restTotal: Math.max(remaining, restTotal + extra) })
+    // Re-schedules the end-of-rest alarm and the native notification countdown.
+    fireStartRest(remaining, workoutStartedAt ?? Date.now())
   },
 
   // Manual cancel — cancel the alarm notification and tell the service to drop the rest display.

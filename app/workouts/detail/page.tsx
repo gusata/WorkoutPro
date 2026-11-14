@@ -1,352 +1,186 @@
 'use client'
 
-import { Suspense, useState } from 'react'
+import { Suspense, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useSearchParams } from 'next/navigation'
-import {
-  ArrowLeft, Play, Plus, Trash2, Search, ChevronDown, ChevronUp, ArrowUp, ArrowDown
-} from 'lucide-react'
-import { useWorkoutStore } from '@/stores/useWorkoutStore'
-import { useSessionStore } from '@/stores/useSessionStore'
-import { useProfileStore } from '@/stores/useProfileStore'
-import { Card } from '@/components/ui/Card'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Link2, Play, Plus, Search, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { DecimalInput } from '@/components/ui/DecimalInput'
 import { Modal } from '@/components/ui/Modal'
-import { Badge } from '@/components/ui/Badge'
-import { Input, Select, TextArea } from '@/components/ui/Input'
-import { MUSCLE_GROUPS, formatVolume, formatDate } from '@/lib/utils'
-import { getExerciseHistory, getExerciseRecords } from '@/lib/exerciseHistory'
-import type { Exercise, WorkoutSession } from '@/types'
+import { LocalNav, SectionHeader } from '@/components/layout/PageHeader'
+import { useProfileStore } from '@/stores/useProfileStore'
+import { useSessionStore } from '@/stores/useSessionStore'
+import { useWorkoutStore } from '@/stores/useWorkoutStore'
+import { exerciseMatches } from '@/lib/training'
+import { formatDate, formatVolume } from '@/lib/utils'
+import type { Exercise, WorkoutExerciseConfig } from '@/types'
 
-const GREEN  = '#00c896'
-const INDIGO = '#6366f1'
-
-interface ExerciseRowProps {
-  ex: Exercise
-  workoutColor: string
-  sessions: WorkoutSession[]
-  isOpen: boolean
-  canMoveUp: boolean
-  canMoveDown: boolean
-  onToggle: () => void
-  onRemove: () => void
-  onMoveUp: () => void
-  onMoveDown: () => void
-}
-
-function ExerciseRow({ ex, workoutColor, sessions, isOpen, canMoveUp, canMoveDown, onToggle, onRemove, onMoveUp, onMoveDown }: ExerciseRowProps) {
-  const exSessions  = sessions.flatMap((s) => s.exercises.filter((se) => se.exerciseId === ex.id))
-  const allSets     = exSessions.flatMap((se) => se.sets)
-  const records = getExerciseRecords(getExerciseHistory(ex.id, sessions, []))
-  const bestWeight  = allSets.length > 0 ? Math.max(...allSets.map((s) => s.weight)) : 0
-  const bestVolume  = exSessions.length > 0
-    ? Math.max(...exSessions.map((se) => se.sets.reduce((a, s) => a + s.weight * s.reps, 0)))
-    : 0
-
-  return (
-    <div className="list-none">
-      <Card>
-        <div className="flex items-center">
-          <div className="flex flex-col gap-1 pl-3 pr-1 py-3 flex-none">
-            <button
-              type="button"
-              onClick={onMoveUp}
-              disabled={!canMoveUp}
-              className="rounded-lg p-1 text-zinc-600 transition-colors disabled:opacity-25 hover:text-zinc-300"
-              aria-label="Mover exercicio para cima"
-            >
-              <ArrowUp size={13} />
-            </button>
-            <button
-              type="button"
-              onClick={onMoveDown}
-              disabled={!canMoveDown}
-              className="rounded-lg p-1 text-zinc-600 transition-colors disabled:opacity-25 hover:text-zinc-300"
-              aria-label="Mover exercicio para baixo"
-            >
-              <ArrowDown size={13} />
-            </button>
-          </div>
-
-          {/* Expand button */}
-          <button
-            className="flex-1 pr-4 py-4 flex items-center gap-3 text-left min-w-0"
-            onClick={onToggle}
-          >
-            <div
-              className="w-9 h-9 rounded-lg flex items-center justify-center flex-none text-sm"
-              style={{ background: `${workoutColor}18`, color: workoutColor }}
-            >
-              💪
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-white text-sm">{ex.name}</p>
-              <p className="text-xs text-zinc-500">{ex.muscleGroup}</p>
-            </div>
-            <div className="flex items-center gap-1">
-              <Link
-                href={`/exercises/detail?id=${ex.id}`}
-                onClick={(e) => e.stopPropagation()}
-                className="rounded-full bg-[var(--surface-2)] px-2.5 py-1 text-[11px] font-bold text-[var(--accent)]"
-              >
-                PRs
-              </Link>
-              <button
-                onClick={(e) => { e.stopPropagation(); onRemove() }}
-                className="p-1.5 rounded-lg text-zinc-700 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-              >
-                <Trash2 size={13} />
-              </button>
-              {isOpen
-                ? <ChevronUp  size={15} className="text-zinc-500" />
-                : <ChevronDown size={15} className="text-zinc-500" />}
-            </div>
-          </button>
-        </div>
-
-        {isOpen && (
-          <div className="overflow-hidden">
-            <div
-              className="px-4 pb-4 grid grid-cols-2 gap-2 pt-3"
-              style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}
-            >
-              {[
-                { label: 'Melhor carga',  value: bestWeight > 0 ? `${bestWeight}kg` : '—' },
-                { label: 'Melhor volume', value: bestVolume > 0 ? formatVolume(bestVolume) : '—' },
-              ].map((item) => (
-                <div key={item.label} className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)' }}>
-                  <p className="text-[11px] text-zinc-500">{item.label}</p>
-                  <p className="font-bold text-white mt-0.5">{item.value}</p>
-                </div>
-              ))}
-              <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)' }}>
-                <p className="text-[11px] text-zinc-500">1RM estimado</p>
-                <p className="font-bold text-white mt-0.5">
-                  {records.bestEstimatedOneRm > 0 ? `${records.bestEstimatedOneRm.toFixed(1)}kg` : '---'}
-                </p>
-              </div>
-              <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)' }}>
-                <p className="text-[11px] text-zinc-500">Sessoes</p>
-                <p className="font-bold text-white mt-0.5">{records.sessions}</p>
-              </div>
-              {ex.notes && (
-                <div className="col-span-2 rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)' }}>
-                  <p className="text-[11px] text-zinc-500 mb-1">Observações</p>
-                  <p className="text-xs text-zinc-300">{ex.notes}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </Card>
-    </div>
-  )
-}
+const WEEKDAYS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
+const WEEKDAY_NAMES = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado']
 
 function WorkoutDetail() {
-  const searchParams = useSearchParams()
-  const id = searchParams.get('id') ?? ''
   const router = useRouter()
-
-  const { workouts, exercises, addExercise, addExerciseToWorkout, removeExerciseFromWorkout, reorderExercises } = useWorkoutStore()
-  const { startSession } = useSessionStore()
-  const { sessions } = useProfileStore()
-
-  const workout = workouts.find((w) => w.id === id)
-  const workoutExercises = workout?.exerciseIds
-    .map((eid) => exercises.find((e) => e.id === eid))
-    .filter(Boolean) as Exercise[]
-
-  const [showAddModal, setShowAddModal] = useState(false)
-  const [showExModal,  setShowExModal]  = useState(false)
-  const [exSearch, setExSearch] = useState('')
-  const [exName,   setExName]   = useState('')
-  const [exMuscle, setExMuscle] = useState(MUSCLE_GROUPS[0])
-  const [exNotes,  setExNotes]  = useState('')
-  const [expanded, setExpanded] = useState<string | null>(null)
-
-  const filtered = exercises.filter(
-    (e) => e.name.toLowerCase().includes(exSearch.toLowerCase()) && !workout?.exerciseIds.includes(e.id)
+  const id = useSearchParams().get('id') ?? ''
+  const workouts = useWorkoutStore((state) => state.workouts)
+  const exercises = useWorkoutStore((state) => state.exercises)
+  const updateWorkout = useWorkoutStore((state) => state.updateWorkout)
+  const addExerciseToWorkout = useWorkoutStore((state) => state.addExerciseToWorkout)
+  const removeExerciseFromWorkout = useWorkoutStore((state) => state.removeExerciseFromWorkout)
+  const reorderExercises = useWorkoutStore((state) => state.reorderExercises)
+  const sessions = useProfileStore((state) => state.sessions)
+  const startSession = useSessionStore((state) => state.startSession)
+  const workout = workouts.find((item) => item.id === id)
+  const workoutExercises = useMemo(
+    () => (workout?.exerciseIds.map((exerciseId) => exercises.find((item) => item.id === exerciseId)).filter((item): item is Exercise => Boolean(item)) ?? []),
+    [exercises, workout]
   )
-  const workoutSessions = sessions.filter((s) => s.workoutId === id).slice(0, 5)
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [query, setQuery] = useState('')
+  const recent = useMemo(() => sessions.filter((session) => session.workoutId === id && session.finishedAt).sort((a, b) => new Date(b.finishedAt!).getTime() - new Date(a.finishedAt!).getTime()).slice(0, 5), [id, sessions])
 
-  if (!workout) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-zinc-500">Treino não encontrado</p>
-      </div>
-    )
+  if (!workout) return <div className="apple-page page-narrow pt-24"><p className="subhead text-center text-[var(--muted)]">Treino não encontrado.</p></div>
+
+  const muscles = [...new Set(workoutExercises.map((exercise) => exercise.muscleGroup))]
+  const totalSets = workoutExercises.reduce((total, exercise) => total + configFor(exercise.id).targetSets, 0)
+  const days = workout.scheduledWeekdays ?? []
+
+  function configFor(exerciseId: string): WorkoutExerciseConfig {
+    return workout!.exerciseConfigs?.find((item) => item.exerciseId === exerciseId) ?? { exerciseId, targetSets: 3, minReps: 8, maxReps: 12, restSeconds: 90, supersetId: null, progression: { type: 'double-progression', increment: 2.5, minimumRir: 1 } }
   }
 
-  async function handleStart() {
-    await startSession(workout!, workoutExercises ?? [])
-    router.push('/workouts/execute')
+  async function changeConfig(exerciseId: string, updates: Partial<WorkoutExerciseConfig>) {
+    const configs = workout!.exerciseIds.map((currentId) => currentId === exerciseId ? { ...configFor(currentId), ...updates } : configFor(currentId))
+    await updateWorkout(id, { exerciseConfigs: configs })
   }
 
-  async function createAndAdd() {
-    if (!exName.trim()) return
-    const exId = await addExercise({ name: exName.trim(), muscleGroup: exMuscle, notes: exNotes })
-    await addExerciseToWorkout(id, exId)
-    setExName(''); setExNotes(''); setShowExModal(false)
+  async function start() { await startSession(workout!, workoutExercises); router.push('/workouts/execute') }
+  function move(exerciseId: string, direction: -1 | 1) {
+    const index = workout!.exerciseIds.indexOf(exerciseId); const next = index + direction
+    if (next < 0 || next >= workout!.exerciseIds.length) return
+    const order = [...workout!.exerciseIds]; const [item] = order.splice(index, 1); order.splice(next, 0, item); void reorderExercises(id, order)
   }
-
-  function moveExercise(exerciseId: string, direction: -1 | 1) {
-    const currentIndex = workout!.exerciseIds.indexOf(exerciseId)
-    const nextIndex = currentIndex + direction
-    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= workout!.exerciseIds.length) return
-
-    const nextOrder = [...workout!.exerciseIds]
-    const [item] = nextOrder.splice(currentIndex, 1)
-    nextOrder.splice(nextIndex, 0, item)
-    reorderExercises(id, nextOrder)
+  function toggleDay(day: number) {
+    const next = days.includes(day) ? days.filter((item) => item !== day) : [...days, day].sort((a, b) => a - b)
+    void updateWorkout(id, { scheduledWeekdays: next })
   }
 
   return (
-    <div className="px-4 pt-14 pb-28 page-content max-w-lg mx-auto">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <button
-          onClick={() => router.back()}
-          className="rounded-xl p-2 text-zinc-400 hover:text-white transition-colors"
-          style={{ background: 'rgba(255,255,255,0.05)' }}
-        >
-          <ArrowLeft size={20} />
-        </button>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-bold text-white tracking-tight">{workout.name}</h1>
-          <p className="text-xs text-zinc-500">{workoutExercises?.length ?? 0} exercícios</p>
-        </div>
-        <Button onClick={handleStart}>
-          <Play size={15} />
-          Iniciar
-        </Button>
-      </div>
+    <div className="apple-page page-content">
+      <LocalNav
+        title={workout.name}
+        back="/workouts"
+        actions={<button type="button" onClick={start} disabled={workoutExercises.length === 0} className="pill"><Play size={12} fill="currentColor" aria-hidden />Iniciar</button>}
+      />
 
-      {/* Color accent bar */}
-      <div className="h-[3px] w-full rounded-full mb-5" style={{ background: workout.color }} />
+      <header className="hero">
+        <p className="eyebrow-muted flex items-center gap-2"><span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ background: workout.color }} />Rotina</p>
+        <h1 className="display mt-1">{workout.name}</h1>
+        <p className="lede mt-3">{workoutExercises.length} exercícios · {totalSets} séries{muscles.length ? ` · ${muscles.slice(0, 3).join(', ')}` : ''}</p>
+        <Button size="lg" className="mt-7" onClick={start} disabled={workoutExercises.length === 0}><Play size={15} fill="currentColor" aria-hidden />Começar treino</Button>
+      </header>
 
-      {/* Exercises — drag-to-reorder */}
-      {workoutExercises?.length === 0 ? (
-        <div className="py-8 text-center mb-5">
-          <p className="text-sm text-zinc-600">Nenhum exercício adicionado</p>
-        </div>
-      ) : (
-        <div className="space-y-2 mb-5">
-          {workoutExercises?.map((ex, index) => (
-            <ExerciseRow
-              key={ex.id}
-              ex={ex}
-              workoutColor={workout.color}
-              sessions={sessions}
-              isOpen={expanded === ex.id}
-              canMoveUp={index > 0}
-              canMoveDown={index < workoutExercises.length - 1}
-              onToggle={() => setExpanded(expanded === ex.id ? null : ex.id)}
-              onRemove={() => removeExerciseFromWorkout(id, ex.id)}
-              onMoveUp={() => moveExercise(ex.id, -1)}
-              onMoveDown={() => moveExercise(ex.id, 1)}
-            />
+      <section aria-labelledby="schedule-title" className="stack-section">
+        <SectionHeader id="schedule-title" title="Agenda." subtitle="Dias deste treino. Usados nos lembretes e na tela Hoje." />
+        <div className="tile tile-compact grid grid-cols-7 gap-1.5" role="group" aria-label="Dias da semana">
+          {WEEKDAYS.map((day, index) => (
+            <button
+              key={index}
+              type="button"
+              aria-pressed={days.includes(index)}
+              aria-label={WEEKDAY_NAMES[index]}
+              onClick={() => toggleDay(index)}
+              className={`h-11 rounded-full text-[15px] font-semibold transition-colors ${days.includes(index) ? 'bg-[var(--foreground)] text-[var(--background-elevated)]' : 'bg-[var(--fill)]'}`}
+            >
+              {day}
+            </button>
           ))}
         </div>
-      )}
+      </section>
 
-      <Button variant="outline" className="w-full mb-6" onClick={() => setShowAddModal(true)}>
-        <Plus size={15} />
-        Adicionar Exercício
-      </Button>
-
-      {/* Recent sessions */}
-      {workoutSessions.length > 0 && (
-        <div>
-          <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Histórico</h2>
-          <div className="space-y-2">
-            {workoutSessions.map((s) => (
-              <Card key={s.id} className="p-3 flex items-center gap-3">
-                <div className="flex-1">
-                  <p className="text-sm text-white font-medium">
-                    {s.finishedAt ? formatDate(new Date(s.finishedAt)) : 'Em andamento'}
-                  </p>
-                  <p className="text-xs text-zinc-500">
-                    {formatVolume(s.totalVolume)} · {s.exercises.reduce((a, e) => a + e.sets.length, 0)} séries
-                  </p>
+      <section aria-labelledby="plan-title" className="stack-section">
+        <SectionHeader id="plan-title" title="Plano." action={<button type="button" onClick={() => setAdding(true)} className="link -mb-2.5 text-[17px]"><Plus size={17} aria-hidden />Adicionar</button>} />
+        <div className="list">
+          {workoutExercises.map((exercise, index) => {
+            const config = configFor(exercise.id); const open = expanded === exercise.id
+            return (
+              <div key={exercise.id} className="grouped-row">
+                <div className="flex items-center gap-1 py-2 pl-5 pr-2">
+                  <span aria-hidden className="numeric w-6 flex-none text-[15px] font-semibold text-[var(--muted)]">{index + 1}</span>
+                  <button type="button" onClick={() => setExpanded(open ? null : exercise.id)} aria-expanded={open} className="flex min-h-14 min-w-0 flex-1 items-center gap-2 text-left">
+                    <span className="min-w-0 flex-1">
+                      <span className="headline block truncate">{exercise.name}</span>
+                      <span className="footnote text-[var(--muted)]">{config.targetSets} × {config.minReps}–{config.maxReps} · {config.restSeconds}s{config.supersetId ? ' · Supersérie' : ''}</span>
+                    </span>
+                    <ChevronDown size={17} aria-hidden className={`flex-none text-[var(--muted)] transition-transform ${open ? 'rotate-180' : ''}`} />
+                  </button>
+                  <button type="button" onClick={() => move(exercise.id, -1)} disabled={index === 0} className="flex h-11 w-9 flex-none items-center justify-center text-[var(--muted)] disabled:opacity-20" aria-label={`Mover ${exercise.name} para cima`}><ArrowUp size={17} aria-hidden /></button>
+                  <button type="button" onClick={() => move(exercise.id, 1)} disabled={index === workoutExercises.length - 1} className="flex h-11 w-9 flex-none items-center justify-center text-[var(--muted)] disabled:opacity-20" aria-label={`Mover ${exercise.name} para baixo`}><ArrowDown size={17} aria-hidden /></button>
                 </div>
-                <Badge color={INDIGO}>+{s.xpEarned} XP</Badge>
-              </Card>
-            ))}
-          </div>
+                {open && (
+                  <div className="border-t border-[var(--separator)] bg-[var(--surface-2)] px-5 py-4">
+                    <div className="grid grid-cols-4 gap-2">
+                      <MiniNumber label="Séries" value={config.targetSets} onChange={(value) => void changeConfig(exercise.id, { targetSets: value })} />
+                      <MiniNumber label="Mín." value={config.minReps} onChange={(value) => void changeConfig(exercise.id, { minReps: value })} />
+                      <MiniNumber label="Máx." value={config.maxReps} onChange={(value) => void changeConfig(exercise.id, { maxReps: value })} />
+                      <MiniNumber label="Pausa (s)" value={config.restSeconds} step={15} onChange={(value) => void changeConfig(exercise.id, { restSeconds: value })} />
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      <button type="button" onClick={() => void changeConfig(exercise.id, { supersetId: config.supersetId ? null : `superset-${Math.max(0, index - 1)}` })} aria-pressed={Boolean(config.supersetId)} className="chip"><Link2 size={15} aria-hidden />Supersérie</button>
+                      <Link href={`/exercises/detail?id=${exercise.id}`} className="link px-2 text-[15px]">Histórico e força<ChevronRight size={15} aria-hidden /></Link>
+                      <button type="button" onClick={() => void removeExerciseFromWorkout(id, exercise.id)} className="ml-auto flex min-h-11 items-center gap-1 rounded-full px-2 text-[15px] text-[var(--danger)]"><Trash2 size={15} aria-hidden />Remover</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+          {workoutExercises.length === 0 && <p className="subhead p-8 text-center text-[var(--muted)]">Adicione exercícios para começar.</p>}
         </div>
-      )}
+      </section>
 
-      {/* Add exercise modal */}
-      <Modal open={showAddModal} onClose={() => setShowAddModal(false)} title="Adicionar Exercício">
-        <div className="space-y-3">
-          <div className="relative">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
-            <input
-              value={exSearch}
-              onChange={(e) => setExSearch(e.target.value)}
-              placeholder="Buscar exercício..."
-              className="w-full h-10 rounded-xl pl-9 pr-4 text-sm text-white placeholder:text-zinc-600 focus:outline-none"
-              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
-            />
-          </div>
-          <div className="space-y-1.5 max-h-48 overflow-y-auto">
-            {filtered.map((e) => (
-              <button
-                key={e.id}
-                onClick={async () => { await addExerciseToWorkout(id, e.id); setShowAddModal(false) }}
-                className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-colors"
-                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}
-              >
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-white">{e.name}</p>
-                  <p className="text-xs text-zinc-500">{e.muscleGroup}</p>
-                </div>
-                <Plus size={13} className="text-zinc-600" />
-              </button>
-            ))}
-            {filtered.length === 0 && (
-              <p className="text-sm text-zinc-600 text-center py-4">Nenhum exercício disponível</p>
-            )}
-          </div>
-          <div className="pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-            <button
-              onClick={() => { setShowAddModal(false); setShowExModal(true) }}
-              className="w-full text-sm flex items-center justify-center gap-2 py-2 transition-colors"
-              style={{ color: GREEN }}
-            >
-              <Plus size={13} />
-              Criar novo exercício
+      <section aria-labelledby="recent-title" className="stack-section">
+        <SectionHeader id="recent-title" title="Histórico." />
+        <div className="list">
+          {recent.map((session) => (
+            <div key={session.id} className="grouped-row flex items-center gap-3 px-5 py-3.5">
+              <div className="flex-1">
+                <p className="headline">{formatDate(new Date(session.finishedAt!))}</p>
+                <p className="footnote text-[var(--muted)]">{Math.round(session.duration / 60)} min · +{session.xpEarned} XP</p>
+              </div>
+              <span className="stat text-[20px]">{formatVolume(session.totalVolume)}</span>
+            </div>
+          ))}
+          {recent.length === 0 && <p className="subhead p-8 text-center text-[var(--muted)]">Seu primeiro registro aparecerá aqui.</p>}
+        </div>
+      </section>
+
+      <Modal open={adding} onClose={() => setAdding(false)} title="Adicionar exercício">
+        <label className="relative mb-3 block">
+          <span className="sr-only">Buscar exercício</span>
+          <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted)]" aria-hidden />
+          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} className="field field-filled !pl-11" placeholder="Buscar exercício" />
+        </label>
+        <div className="list max-h-80 overflow-y-auto !bg-[var(--fill)]">
+          {exercises.filter((exercise) => !workout.exerciseIds.includes(exercise.id) && exerciseMatches(exercise.name, query)).map((exercise) => (
+            <button type="button" key={exercise.id} onClick={async () => { await addExerciseToWorkout(id, exercise.id); setAdding(false) }} className="grouped-row flex min-h-14 w-full items-center px-4 py-3 text-left" aria-label={`Adicionar ${exercise.name}`}>
+              <span className="flex-1"><span className="block">{exercise.name}</span><span className="footnote text-[var(--muted)]">{exercise.muscleGroup}</span></span>
+              <Plus size={17} className="text-[var(--accent)]" aria-hidden />
             </button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal open={showExModal} onClose={() => setShowExModal(false)} title="Novo Exercício">
-        <div className="space-y-4">
-          <Input label="Nome" placeholder="Ex: Supino Reto" value={exName} onChange={(e) => setExName(e.target.value)} />
-          <Select
-            label="Grupo muscular"
-            value={exMuscle}
-            onChange={(e) => setExMuscle(e.target.value as typeof exMuscle)}
-            options={MUSCLE_GROUPS.map((g) => ({ value: g, label: g }))}
-          />
-          <TextArea label="Observações (opcional)" placeholder="Dicas de execução..." value={exNotes} onChange={(e) => setExNotes(e.target.value)} rows={2} />
-          <div className="flex gap-3 pt-2">
-            <Button variant="outline" className="flex-1" onClick={() => setShowExModal(false)}>Cancelar</Button>
-            <Button className="flex-1" onClick={createAndAdd} disabled={!exName.trim()}>Criar</Button>
-          </div>
+          ))}
         </div>
       </Modal>
     </div>
   )
 }
 
-export default function WorkoutDetailPage() {
+function MiniNumber({ label, value, step = 1, onChange }: { label: string; value: number; step?: number; onChange: (value: number) => void }) {
   return (
-    <Suspense fallback={null}>
-      <WorkoutDetail />
-    </Suspense>
+    <label>
+      <span className="caption mb-1 block font-semibold text-[var(--muted)]">{label}</span>
+      <DecimalInput integer min={1} value={value} onValueChange={onChange} title={step > 1 ? `Em passos de ${step}` : undefined} className="set-field !bg-[var(--surface)]" />
+    </label>
   )
 }
+
+export default function WorkoutDetailPage() { return <Suspense fallback={null}><WorkoutDetail /></Suspense> }

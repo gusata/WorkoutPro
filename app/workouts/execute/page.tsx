@@ -1,421 +1,717 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  X, Check, Plus, Timer, ChevronDown, ChevronUp,
-  Trophy, Zap, Clock, Minus, Share2, Trash2
+  Check, ChevronDown, Copy, Flame, Layers3, MoreHorizontal, NotebookPen, Play, Plus, Replace, Scale, Share, Timer, Trash2, Trophy, Video, X,
 } from 'lucide-react'
+import { useShallow } from 'zustand/react/shallow'
+import { Button, buttonClasses } from '@/components/ui/Button'
+import { DecimalInput } from '@/components/ui/DecimalInput'
+import { Modal } from '@/components/ui/Modal'
+import { RestPresetPicker, RestTimerOverlay } from '@/components/timer/RestTimer'
+import { PlateCalculator } from '@/components/training/PlateCalculator'
+import { VideoModal } from '@/components/training/MediaViewer'
+import { useProfileStore } from '@/stores/useProfileStore'
 import { useSessionStore } from '@/stores/useSessionStore'
 import { useTimerStore } from '@/stores/useTimerStore'
-import { useProfileStore } from '@/stores/useProfileStore'
-import { Card } from '@/components/ui/Card'
-import { Button } from '@/components/ui/Button'
-import { Modal } from '@/components/ui/Modal'
-import { RestTimerOverlay, RestPresetPicker } from '@/components/timer/RestTimer'
-import { formatDuration } from '@/lib/utils'
+import { useWorkoutStore } from '@/stores/useWorkoutStore'
+import { generateWarmupSets, getProgressionSuggestion, SET_TYPES } from '@/lib/training'
+import { bestsByExercise, recordForSet, type ExerciseBest } from '@/lib/insights'
+import { estimateOneRm, lastSetsForExercise } from '@/lib/exerciseHistory'
+import { saveMedia } from '@/lib/media'
+import { renderShareCard, shareImage } from '@/lib/shareCard'
+import { averageHeartRate } from '@/lib/health'
+import { DEFAULT_BAR_WEIGHT } from '@/lib/preferences'
+import { formatDecimal, formatDuration, formatVolume } from '@/lib/utils'
+import { cn } from '@/lib/cn'
+import type { ActiveExercise, ActiveSession, ActiveSet, Exercise } from '@/types'
+import { format } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 
-function NumberInput({ value, onChange, min = 0, step = 1, suffix }: {
-  value: number, onChange: (v: number) => void, min?: number, step?: number, suffix?: string
-}) {
-  return (
-    <div className="flex min-w-0 items-center justify-center gap-0.5">
-      <button
-        onClick={() => onChange(Math.max(min, value - step))}
-        className="flex h-6 w-6 flex-none items-center justify-center rounded-lg text-zinc-400 transition-colors"
-        style={{ background: 'rgba(255,255,255,0.06)' }}
-      >
-        <Minus size={11} />
-      </button>
-      <div className="min-w-[30px] text-center">
-        <span className="text-xs font-bold text-white tabular-nums">{value}</span>
-        {suffix && <span className="text-[10px] text-zinc-500 ml-0.5">{suffix}</span>}
-      </div>
-      <button
-        onClick={() => onChange(value + step)}
-        className="flex h-6 w-6 flex-none items-center justify-center rounded-lg text-zinc-400 transition-colors"
-        style={{ background: 'rgba(255,255,255,0.06)' }}
-      >
-        <Plus size={11} />
-      </button>
-    </div>
-  )
+// Fits a 360px-wide phone: flexible weight/reps columns keep ~58px for values like "102,5".
+const SET_GRID = 'grid grid-cols-[2.25rem_2.75rem_minmax(0,1fr)_minmax(0,1fr)_2.5rem_2.75rem] items-center gap-1'
+const RECORD_EVENT = 'workoutpro:record'
+
+interface SummaryData {
+  workoutName: string
+  startedAt: Date
+  finishedAt: Date
+  volume: number
+  duration: number
+  xp: number
+  sets: number
+  prs: number
 }
+
+interface RecordToastData {
+  id: number
+  exercise: string
+  detail: string
+}
+
+const BestsContext = createContext<Map<string, ExerciseBest>>(new Map())
 
 export default function ExecutePage() {
   const router = useRouter()
-  const { active, updateSet, completeSet, addSet, removeSet, setRestSeconds, endSession, discardSession } = useSessionStore()
-  const { workoutSeconds, workoutRunning, startWorkoutTimer, stopWorkoutTimer, resetWorkoutTimer, startRest, tickWorkout, tickRest } = useTimerStore()
-  const { load: reloadProfile, checkAchievements } = useProfileStore()
-
+  const active = useSessionStore((state) => state.active)
+  const endSession = useSessionStore((state) => state.endSession)
+  const discardSession = useSessionStore((state) => state.discardSession)
+  const replaceExercise = useSessionStore((state) => state.replaceExercise)
+  const exercises = useWorkoutStore((state) => state.exercises)
+  const sessions = useProfileStore((state) => state.sessions)
+  const barWeight = useProfileStore((state) => state.profile?.preferences?.barWeight ?? DEFAULT_BAR_WEIGHT)
+  const reloadProfile = useProfileStore((state) => state.load)
+  const { workoutRunning, workoutStartedAt, startWorkoutTimer } = useTimerStore(
+    useShallow((state) => ({ workoutRunning: state.workoutRunning, workoutStartedAt: state.workoutStartedAt, startWorkoutTimer: state.startWorkoutTimer }))
+  )
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
-  const [confirmDiscard, setConfirmDiscard] = useState(false)
+  const [optionsFor, setOptionsFor] = useState<string | null>(null)
+  const [discardOpen, setDiscardOpen] = useState(false)
+  const [finishOpen, setFinishOpen] = useState(false)
+  const [platesFor, setPlatesFor] = useState<{ name: string; weight: number } | null>(null)
+  const [replaceFor, setReplaceFor] = useState<string | null>(null)
+  const [videoFor, setVideoFor] = useState<{ exerciseId: string; setId: string } | null>(null)
+  const [playing, setPlaying] = useState<{ id: string; title: string } | null>(null)
+  const [summary, setSummary] = useState<SummaryData | null>(null)
   const [finishing, setFinishing] = useState(false)
-  const [summary, setSummary] = useState<{
-    volume: number; xp: number; duration: number; workoutName: string
-  } | null>(null)
-  const [shareToast, setShareToast] = useState(false)
-  const shareToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [record, setRecord] = useState<RecordToastData | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const videoInput = useRef<HTMLInputElement>(null)
+
+  // Records are compared with the history before this session.
+  const bests = useMemo(() => bestsByExercise(sessions, active?.sessionId), [active?.sessionId, sessions])
 
   useEffect(() => {
-    if (!active) { router.replace('/workouts'); return }
-    if (!workoutRunning) startWorkoutTimer()
-    // Dynamically import to avoid Turbopack module-level issues with @capacitor/core
-    import('@/lib/notifications')
-      .then(({ requestNotificationPermission }) => requestNotificationPermission())
-      .catch(() => {})
-  }, [active, workoutRunning, startWorkoutTimer, router])
+    if (!active && !summary && !finishing) router.replace('/workouts')
+    if (!active) return
+    const startedAt = new Date(active.startedAt).getTime()
+    if (!workoutRunning || workoutStartedAt !== startedAt) startWorkoutTimer(startedAt)
+  }, [active, finishing, router, startWorkoutTimer, summary, workoutRunning, workoutStartedAt])
+
+  useEffect(() => {
+    function onRecord(event: Event) {
+      const detail = (event as CustomEvent<Omit<RecordToastData, 'id'>>).detail
+      setRecord({ ...detail, id: Date.now() })
+      if ('vibrate' in navigator) navigator.vibrate?.([30, 60, 30, 60, 120])
+    }
+    window.addEventListener(RECORD_EVENT, onRecord)
+    return () => window.removeEventListener(RECORD_EVENT, onRecord)
+  }, [])
+
+  useEffect(() => {
+    if (!record) return
+    const timer = setTimeout(() => setRecord(null), 4200)
+    return () => clearTimeout(timer)
+  }, [record])
+
+  useEffect(() => {
+    if (!notice) return
+    const timer = setTimeout(() => setNotice(null), 3500)
+    return () => clearTimeout(timer)
+  }, [notice])
+
+  useLiveStatus(active)
+
+  const totals = useMemo(() => {
+    const sets = active?.exercises.flatMap((item) => item.sets) ?? []
+    const done = sets.filter((item) => item.completed)
+    return { all: sets.length, done: done.length, volume: done.reduce((sum, item) => sum + item.weight * item.reps, 0) }
+  }, [active])
+
+  const toggleCollapsed = useCallback((exerciseId: string) => {
+    setCollapsed((state) => ({ ...state, [exerciseId]: !state[exerciseId] }))
+  }, [])
+  const toggleOptions = useCallback((exerciseId: string) => {
+    setOptionsFor((current) => (current === exerciseId ? null : exerciseId))
+  }, [])
+  const openReplace = useCallback((exerciseId: string) => {
+    setReplaceFor(exerciseId)
+    setOptionsFor(null)
+  }, [])
+  const openPlates = useCallback((name: string, weight: number) => {
+    setPlatesFor({ name, weight })
+    setOptionsFor(null)
+  }, [])
+  const openVideo = useCallback((exerciseId: string, setId: string) => {
+    setVideoFor({ exerciseId, setId })
+    setOptionsFor(null)
+    videoInput.current?.click()
+  }, [])
+  const playVideo = useCallback((id: string, title: string) => setPlaying({ id, title }), [])
+
+  if (summary) return <Summary summary={summary} onClose={() => router.replace('/dashboard')} />
+  if (!active) return null
+
+  function finishRequest() {
+    if (totals.done < totals.all) setFinishOpen(true)
+    else void finish()
+  }
+
+  async function finish() {
+    if (!active) return
+    setFinishing(true)
+    const workoutName = active.workoutName
+    try {
+      const session = await endSession()
+      if (session) {
+        await reloadProfile()
+        const sets = session.exercises.reduce((total, item) => total + item.sets.length, 0)
+        setSummary({
+          workoutName,
+          startedAt: new Date(session.startedAt),
+          finishedAt: new Date(session.finishedAt ?? Date.now()),
+          volume: session.totalVolume, duration: session.duration, xp: session.xpEarned, sets, prs: session.newPrs,
+        })
+      }
+    } finally {
+      setFinishing(false)
+      setFinishOpen(false)
+    }
+  }
+
+  async function onVideoPicked(file: File | undefined) {
+    const target = videoFor
+    setVideoFor(null)
+    if (!file || !target || !active) return
+    try {
+      const item = await saveMedia(file, 'video', { sessionId: active.sessionId, exerciseId: target.exerciseId, setId: target.setId })
+      useSessionStore.getState().updateSet(target.exerciseId, target.setId, { videoId: item.id })
+      setNotice('Vídeo salvo neste aparelho.')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Não foi possível salvar o vídeo.')
+    }
+  }
+
+  const progress = totals.all ? Math.round((totals.done / totals.all) * 100) : 0
+  const replacing = active.exercises.find((item) => item.exerciseId === replaceFor)
+
+  return (
+    <BestsContext.Provider value={bests}>
+      <div className="apple-page page-content !pb-48">
+        <header className="local-nav" data-scrolled="true">
+          <div className="local-nav-inner">
+            <button type="button" onClick={() => setDiscardOpen(true)} className="-ml-2 flex h-11 w-11 flex-none items-center justify-center rounded-full text-[var(--muted)]" aria-label="Sair do treino">
+              <X size={22} aria-hidden />
+            </button>
+            <div className="min-w-0 flex-1">
+              <h1 className="headline truncate">{active.workoutName}</h1>
+              <p className="footnote numeric flex gap-3 text-[var(--muted)]">
+                <WorkoutClock />
+                <span>{formatVolume(totals.volume)}</span>
+              </p>
+            </div>
+            <div className="text-right">
+              <strong className="stat block text-[22px]">{totals.done}<span className="text-[15px] text-[var(--muted)]">/{totals.all}</span></strong>
+              <span className="caption text-[var(--muted)]">séries</span>
+            </div>
+          </div>
+          <div className="progress-track -mx-4 !h-[3px] !rounded-none" role="progressbar" aria-label="Séries concluídas" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
+            <div className="progress-fill !rounded-none" style={{ width: `${progress}%` }} />
+          </div>
+        </header>
+
+        <div className="mt-5 grid gap-3 xl:grid-cols-2">
+          {active.exercises.map((exercise) => (
+            <ExerciseCard
+              key={exercise.exerciseId}
+              exercise={exercise}
+              collapsed={Boolean(collapsed[exercise.exerciseId])}
+              optionsOpen={optionsFor === exercise.exerciseId}
+              barWeight={barWeight}
+              onToggleCollapsed={toggleCollapsed}
+              onToggleOptions={toggleOptions}
+              onReplace={openReplace}
+              onPlates={openPlates}
+              onRecordVideo={openVideo}
+              onPlayVideo={playVideo}
+            />
+          ))}
+        </div>
+
+        <div
+          className="glass-control fixed left-1/2 z-30 flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 items-center gap-3 rounded-full p-1.5 pl-5"
+          style={{ bottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+        >
+          <div className="min-w-0 flex-1">
+            <strong className="numeric block text-[17px] font-semibold leading-5">{progress}%<span className="ml-1 text-[13px] font-normal text-[var(--muted)]">concluído</span></strong>
+            <span className="footnote numeric text-[var(--muted)]">{formatVolume(totals.volume)} levantados</span>
+          </div>
+          <Button onClick={finishRequest} disabled={finishing}>{finishing ? 'Salvando...' : 'Finalizar'}</Button>
+        </div>
+        <RestTimerOverlay />
+
+        {record && (
+          <div role="status" aria-live="polite" className="pointer-events-none fixed left-0 right-0 z-50 flex justify-center px-4" style={{ top: 'max(0.75rem, env(safe-area-inset-top))' }}>
+            <div key={record.id} className="record-pop pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-[22px] bg-[#1d1d1f] px-4 py-3.5 text-[#f5f5f7] shadow-[var(--shadow-float)]">
+              <span aria-hidden className="flex h-11 w-11 flex-none items-center justify-center rounded-full bg-gradient-to-b from-[#ffd60a] to-[#ff9f0a] text-[#1d1d1f]"><Trophy size={20} strokeWidth={2.2} /></span>
+              <span className="min-w-0">
+                <span className="caption block font-semibold uppercase tracking-wide text-[#ff9f45]">Novo recorde</span>
+                <span className="headline block truncate">{record.exercise}</span>
+                <span className="footnote block text-[#a1a1a6]">{record.detail}</span>
+              </span>
+            </div>
+          </div>
+        )}
+        {notice && (
+          <p role="status" className="toast-enter fixed left-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 rounded-full bg-[#1d1d1f] px-5 py-3 text-center text-[15px] text-[#f5f5f7]" style={{ top: 'max(0.75rem, env(safe-area-inset-top))' }}>
+            {notice}
+          </p>
+        )}
+
+        <input ref={videoInput} type="file" accept="video/*" capture="environment" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; void onVideoPicked(file) }} />
+
+        <Modal open={discardOpen} onClose={() => setDiscardOpen(false)} title="Descartar treino">
+          <p className="subhead mb-6 text-[var(--muted)]">Todo o progresso desta sessão será perdido.</p>
+          <div className="flex gap-3">
+            <Button variant="secondary" className="flex-1" onClick={() => setDiscardOpen(false)}>Continuar</Button>
+            <Button variant="danger" className="flex-1" onClick={() => { discardSession(); router.replace('/workouts') }}>Descartar</Button>
+          </div>
+        </Modal>
+        <Modal open={finishOpen} onClose={() => setFinishOpen(false)} title="Finalizar treino incompleto">
+          <p className="subhead mb-6 text-[var(--muted)]">Há {totals.all - totals.done} séries pendentes. Só as concluídas entrarão no histórico.</p>
+          <div className="flex gap-3">
+            <Button variant="secondary" className="flex-1" onClick={() => setFinishOpen(false)}>Continuar</Button>
+            <Button className="flex-1" disabled={finishing} onClick={() => void finish()}>Finalizar assim</Button>
+          </div>
+        </Modal>
+        <PlateCalculator target={platesFor} defaultBar={barWeight} onClose={() => setPlatesFor(null)} />
+        <ReplaceModal
+          current={replacing ?? null}
+          exercises={exercises}
+          activeIds={new Set(active.exercises.map((item) => item.exerciseId))}
+          onClose={() => setReplaceFor(null)}
+          onPick={(item) => {
+            if (replaceFor) replaceExercise(replaceFor, item, lastSetsForExercise(item.id, sessions))
+            setReplaceFor(null)
+          }}
+        />
+        <VideoModal mediaId={playing?.id ?? null} title={playing?.title ?? 'Vídeo'} onClose={() => setPlaying(null)} />
+      </div>
+    </BestsContext.Provider>
+  )
+}
+
+/** Pushes "what now / what next" to the Android ongoing notification (lock screen). */
+function useLiveStatus(active: ActiveSession | null) {
+  const status = useMemo(() => {
+    if (!active) return null
+    const steps = active.exercises.flatMap((exercise) =>
+      exercise.sets.map((set, index) => ({ exercise, set, index }))
+    )
+    const pendingIndex = steps.findIndex((step) => !step.set.completed)
+    const describe = (step: (typeof steps)[number] | undefined) => step
+      ? `${step.exercise.exerciseName} · série ${step.index + 1} de ${step.exercise.sets.length} · ${formatDecimal(step.set.weight)} kg × ${step.set.reps}`
+      : 'Último passo: finalizar o treino'
+    return {
+      workoutName: active.workoutName,
+      current: pendingIndex < 0 ? 'Tudo feito. Finalize o treino.' : describe(steps[pendingIndex]),
+      next: pendingIndex < 0 ? 'Finalizar o treino' : describe(steps[pendingIndex]),
+      doneSets: steps.filter((step) => step.set.completed).length,
+      totalSets: steps.length,
+    }
+  }, [active])
+  const key = status ? JSON.stringify(status) : ''
+
+  useEffect(() => {
+    if (!key) return
+    const timer = setTimeout(() => {
+      import('@/lib/timerPlugin').then(({ TimerPlugin }) => TimerPlugin.updateStatus(JSON.parse(key))).catch(() => undefined)
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [key])
+}
+
+/** Re-renders once per second on its own, so the rest of the workout screen doesn't. */
+function WorkoutClock() {
+  const workoutSeconds = useTimerStore((state) => state.workoutSeconds)
+  const workoutRunning = useTimerStore((state) => state.workoutRunning)
+  const tickWorkout = useTimerStore((state) => state.tickWorkout)
 
   useEffect(() => {
     if (!workoutRunning) return
-    const interval = setInterval(tickWorkout, 1000)
-    return () => clearInterval(interval)
-  }, [workoutRunning, tickWorkout])
-
-  // Recalculate both timers from wall-clock the moment the app returns to foreground.
-  // setInterval is throttled/paused by Android when backgrounded; this gives instant correction.
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') {
-        tickWorkout()
-        tickRest()
-      }
-    }
+    const timer = setInterval(tickWorkout, 1000)
+    const onVisible = () => { if (document.visibilityState === 'visible') tickWorkout() }
     document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [tickWorkout, tickRest])
-
-  const totalCompleted = active?.exercises.reduce(
-    (acc, ex) => acc + ex.sets.filter((s) => s.completed).length, 0
-  ) ?? 0
-
-  const totalSets = active?.exercises.reduce((acc, ex) => acc + ex.sets.length, 0) ?? 0
-
-  async function handleFinish() {
-    setFinishing(true)
-    stopWorkoutTimer()
-    const workoutName = active?.workoutName ?? ''
-    const session = await endSession()
-    if (session) {
-      setSummary({ volume: session.totalVolume, xp: session.xpEarned, duration: session.duration, workoutName })
-      await reloadProfile()
-      await checkAchievements()
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
     }
-    resetWorkoutTimer()
-    setFinishing(false)
-  }
+  }, [tickWorkout, workoutRunning])
 
-  function handleCompleteSet(exerciseId: string, setId: string) {
-    const exercise = active?.exercises.find((e) => e.exerciseId === exerciseId)
-    const set = exercise?.sets.find((s) => s.id === setId)
-    if (!set?.completed) {
-      startRest(exercise?.restSeconds ?? 90)
-    }
-    completeSet(exerciseId, setId)
-  }
+  return <span className="tabular-nums" aria-label={`Tempo de treino ${formatDuration(workoutSeconds)}`}>{formatDuration(workoutSeconds)}</span>
+}
 
-  async function handleShare() {
-    if (!summary) return
-    const text = [
-      `💪 Treino concluído: ${summary.workoutName}`,
-      `⏱ Duração: ${formatDuration(summary.duration)}`,
-      `🏋️ Volume: ${(summary.volume / 1000).toFixed(1)}t`,
-      `⚡ +${summary.xp} XP`,
-      '',
-      'Treinado com WorkoutPro',
-    ].join('\n')
+interface ExerciseCardProps {
+  exercise: ActiveExercise
+  collapsed: boolean
+  optionsOpen: boolean
+  barWeight: number
+  onToggleCollapsed: (exerciseId: string) => void
+  onToggleOptions: (exerciseId: string) => void
+  onReplace: (exerciseId: string) => void
+  onPlates: (name: string, weight: number) => void
+  onRecordVideo: (exerciseId: string, setId: string) => void
+  onPlayVideo: (mediaId: string, title: string) => void
+}
 
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: 'WorkoutPro', text })
-      } else {
-        await navigator.clipboard.writeText(text)
-        // show toast
-        if (shareToastTimerRef.current) clearTimeout(shareToastTimerRef.current)
-        setShareToast(true)
-        shareToastTimerRef.current = setTimeout(() => setShareToast(false), 2500)
-      }
-    } catch {
-      // user cancelled share or clipboard failed — do nothing
-    }
-  }
+const OPTION_BUTTON = 'flex min-h-12 items-center gap-2 rounded-[var(--radius-sm)] bg-[var(--fill)] px-3.5 text-left text-[15px] font-medium'
 
-  if (!active) return null
+// Store updates are immutable per exercise, so only the edited card re-renders.
+const ExerciseCard = memo(function ExerciseCard({
+  exercise, collapsed, optionsOpen, barWeight, onToggleCollapsed, onToggleOptions, onReplace, onPlates, onRecordVideo, onPlayVideo,
+}: ExerciseCardProps) {
+  const { addSet, removeSet, duplicateSet, applySetToFollowing, updateExerciseNotes, setRestSeconds, insertWarmupSets } = useSessionStore(
+    useShallow((state) => ({
+      addSet: state.addSet, removeSet: state.removeSet, duplicateSet: state.duplicateSet,
+      applySetToFollowing: state.applySetToFollowing, updateExerciseNotes: state.updateExerciseNotes,
+      setRestSeconds: state.setRestSeconds, insertWarmupSets: state.insertWarmupSets,
+    }))
+  )
+  const suggestion = useMemo(
+    () => getProgressionSuggestion(exercise.previousSets ?? [], exercise.targetMaxReps ?? 12, exercise.progression),
+    [exercise.previousSets, exercise.targetMaxReps, exercise.progression]
+  )
+  const panelId = `exercise-${exercise.exerciseId}-sets`
+  const optionsId = `exercise-${exercise.exerciseId}-options`
+  const doneCount = exercise.sets.filter((set) => set.completed).length
+  const workSet = exercise.sets.find((set) => (set.setType ?? 'normal') !== 'warmup')
+  const workWeight = workSet?.weight ?? 0
+  const warmupPreview = generateWarmupSets(workWeight, barWeight)
+  const videoTarget = [...exercise.sets].reverse().find((set) => set.completed) ?? exercise.sets.find((set) => !set.completed) ?? exercise.sets[0]
+  const videos = exercise.sets.map((set, index) => ({ set, index })).filter((item) => item.set.videoId)
+  const allDone = doneCount === exercise.sets.length && exercise.sets.length > 0
 
-  if (summary) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="text-center space-y-6 max-w-sm w-full">
-          <div className="w-24 h-24 rounded-3xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center mx-auto">
-            <Trophy size={40} className="text-indigo-400" />
-          </div>
-
-          <div>
-            <h1 className="text-3xl font-bold text-white mb-1">Treino Concluído!</h1>
-            <p className="text-zinc-500">Incrível trabalho, atleta 💪</p>
-          </div>
-
-          <div className="grid grid-cols-3 gap-3">
-            <Card className="p-4 text-center">
-              <Clock size={16} className="text-indigo-400 mx-auto mb-1" />
-              <p className="text-lg font-bold text-white">{formatDuration(summary.duration)}</p>
-              <p className="text-xs text-zinc-500">Duração</p>
-            </Card>
-            <Card className="p-4 text-center">
-              <Zap size={16} className="text-yellow-400 mx-auto mb-1" />
-              <p className="text-lg font-bold text-white">+{summary.xp}</p>
-              <p className="text-xs text-zinc-500">XP</p>
-            </Card>
-            <Card className="p-4 text-center">
-              <Check size={16} className="text-emerald-400 mx-auto mb-1" />
-              <p className="text-lg font-bold text-white">{(summary.volume / 1000).toFixed(1)}t</p>
-              <p className="text-xs text-zinc-500">Volume</p>
-            </Card>
-          </div>
-
-          <div className="flex gap-3">
-            <Button size="lg" variant="outline" className="flex-1" onClick={handleShare}>
-              <Share2 size={16} />
-              Compartilhar
-            </Button>
-            <Button size="lg" className="flex-1" onClick={() => router.replace('/dashboard')}>
-              Ver Dashboard
-            </Button>
-          </div>
-
-          {/* Clipboard toast */}
-          <>
-            {shareToast && (
-              <div
-                className="fixed bottom-8 left-1/2 -translate-x-1/2 rounded-xl px-4 py-2 text-sm font-medium text-white"
-                style={{ background: 'rgba(30,30,35,0.95)', border: '1px solid rgba(255,255,255,0.1)' }}
-              >
-                Copiado para a área de transferência!
-              </div>
-            )}
-          </>
-        </div>
+  return (
+    <section className={cn('tile !p-0', exercise.supersetId && 'shadow-[inset_3px_0_0_var(--accent-fill)]')} aria-label={exercise.exerciseName}>
+      <div className="flex items-center gap-1 py-3 pl-5 pr-2">
+        <button
+          type="button"
+          onClick={() => onToggleCollapsed(exercise.exerciseId)}
+          aria-expanded={!collapsed}
+          aria-controls={panelId}
+          className="flex min-h-12 min-w-0 flex-1 items-center gap-3 text-left"
+        >
+          <span className="min-w-0 flex-1">
+            <span className="footnote block truncate font-semibold text-[var(--muted)]">
+              {exercise.muscleGroup}{exercise.supersetId ? ' · Supersérie' : ''}
+            </span>
+            <span className="title-3 block truncate">{exercise.exerciseName}</span>
+          </span>
+          <span className={cn('caption numeric flex-none rounded-full px-2.5 py-1 font-semibold', allDone ? 'bg-[var(--success-fill)] text-white' : 'bg-[var(--fill)] text-[var(--muted)]')}>
+            {doneCount}/{exercise.sets.length}
+          </span>
+          <ChevronDown size={18} aria-hidden className={cn('flex-none text-[var(--muted)] transition-transform duration-300', !collapsed && 'rotate-180')} />
+        </button>
+        <button
+          type="button"
+          onClick={() => onToggleOptions(exercise.exerciseId)}
+          aria-expanded={optionsOpen}
+          aria-controls={optionsId}
+          className="flex h-11 w-11 flex-none items-center justify-center rounded-full text-[var(--accent)]"
+          aria-label={`Opções de ${exercise.exerciseName}`}
+        >
+          <MoreHorizontal size={20} aria-hidden />
+        </button>
       </div>
-    )
+
+      {optionsOpen && (
+        <div id={optionsId} className="grid grid-cols-2 gap-2 border-t border-[var(--separator)] p-4">
+          <button
+            type="button"
+            disabled={warmupPreview.length === 0}
+            onClick={() => { insertWarmupSets(exercise.exerciseId, warmupPreview); onToggleOptions(exercise.exerciseId) }}
+            className={cn(OPTION_BUTTON, 'disabled:opacity-40')}
+            aria-label={warmupPreview.length ? `Gerar aquecimento: ${warmupPreview.map((step) => `${formatDecimal(step.weight)} kg por ${step.reps}`).join(', ')}` : 'Gerar aquecimento (defina a carga primeiro)'}
+          >
+            <Flame size={16} aria-hidden />Aquecimento
+          </button>
+          <button type="button" onClick={() => onPlates(exercise.exerciseName, workWeight)} className={OPTION_BUTTON}>
+            <Scale size={16} aria-hidden />Anilhas
+          </button>
+          <button type="button" onClick={() => onReplace(exercise.exerciseId)} className={OPTION_BUTTON}>
+            <Replace size={16} aria-hidden />Trocar
+          </button>
+          <button type="button" disabled={!videoTarget} onClick={() => videoTarget && onRecordVideo(exercise.exerciseId, videoTarget.id)} className={OPTION_BUTTON}>
+            <Video size={16} aria-hidden />Gravar vídeo
+          </button>
+          {warmupPreview.length > 0 && (
+            <p className="footnote col-span-2 px-1 text-[var(--muted)]">
+              Aquecimento sugerido: {warmupPreview.map((step) => `${formatDecimal(step.weight)} kg × ${step.reps}`).join(' → ')}
+            </p>
+          )}
+          <label className="col-span-2 mt-2 block">
+            <span className="footnote mb-1.5 flex items-center gap-1.5 font-semibold text-[var(--muted)]"><NotebookPen size={14} aria-hidden />Notas e ajustes</span>
+            <textarea
+              value={exercise.notes ?? ''}
+              onChange={(event) => updateExerciseNotes(exercise.exerciseId, event.target.value)}
+              rows={2}
+              className="field resize-none py-3"
+              placeholder="Altura do banco, posição, dica técnica..."
+            />
+          </label>
+          <div className="col-span-2 mt-1">
+            <div className="footnote mb-2 flex items-center gap-1.5 font-semibold text-[var(--muted)]"><Timer size={14} aria-hidden />Descanso</div>
+            <RestPresetPicker currentSeconds={exercise.restSeconds} onSelect={(seconds) => setRestSeconds(exercise.exerciseId, seconds)} />
+          </div>
+        </div>
+      )}
+
+      {!collapsed && (
+        <div id={panelId} className="border-t border-[var(--separator)] px-3 pb-4 pt-3 sm:px-4">
+          {suggestion && (
+            <p className={cn('footnote mb-3 rounded-[var(--radius-sm)] px-3.5 py-2.5', suggestion.progressed ? 'bg-[color-mix(in_srgb,var(--success-fill)_12%,transparent)] text-[var(--success)]' : 'bg-[var(--fill)] text-[var(--muted-strong)]')}>
+              <strong className="font-semibold">{formatDecimal(suggestion.weight)} kg sugeridos.</strong> {suggestion.reason}
+            </p>
+          )}
+          <div className={cn(SET_GRID, 'caption mb-1 px-1 text-center font-semibold text-[var(--muted)]')} aria-hidden>
+            <span>Tipo</span><span>Antes</span><span>Kg</span><span>Reps</span><span>RIR</span><span />
+          </div>
+          <div className="space-y-1">
+            {exercise.sets.map((set, index) => (
+              <SetRow
+                key={set.id}
+                exerciseId={exercise.exerciseId}
+                exerciseName={exercise.exerciseName}
+                restSeconds={exercise.restSeconds}
+                set={set}
+                index={index}
+                previous={exercise.previousSets?.[index]}
+              />
+            ))}
+          </div>
+          {videos.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2 px-1">
+              {videos.map(({ set, index }) => (
+                <button key={set.id} type="button" onClick={() => onPlayVideo(set.videoId!, `${exercise.exerciseName} · série ${index + 1}`)} className="chip">
+                  <Play size={13} fill="currentColor" aria-hidden />Vídeo série {index + 1}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="mt-3 grid grid-cols-[1fr_1fr_1fr_3rem] gap-1.5">
+            <button
+              type="button"
+              onClick={() => { const last = exercise.sets.at(-1); addSet(exercise.exerciseId, { weight: last?.weight ?? 0, reps: last?.reps ?? exercise.targetMinReps ?? 8, rpe: null, rir: last?.rir ?? 2, setType: 'normal' }) }}
+              className="flex h-11 items-center justify-center gap-1 rounded-full bg-[var(--fill)] text-[13px] font-medium text-[var(--accent)]"
+            >
+              <Plus size={14} aria-hidden />Série
+            </button>
+            <button
+              type="button"
+              onClick={() => { const last = exercise.sets.at(-1); if (last) duplicateSet(exercise.exerciseId, last.id) }}
+              className="flex h-11 items-center justify-center gap-1 rounded-full bg-[var(--fill)] text-[13px] font-medium text-[var(--accent)]"
+            >
+              <Copy size={14} aria-hidden />Duplicar
+            </button>
+            <button
+              type="button"
+              onClick={() => { const first = exercise.sets.find((set) => (set.setType ?? 'normal') !== 'warmup') ?? exercise.sets[0]; if (first) applySetToFollowing(exercise.exerciseId, first.id) }}
+              className="flex h-11 items-center justify-center gap-1 rounded-full bg-[var(--fill)] text-[13px] font-medium text-[var(--accent)]"
+              aria-label="Aplicar a primeira série de trabalho às seguintes"
+            >
+              <Layers3 size={14} aria-hidden />Aplicar
+            </button>
+            <button
+              type="button"
+              onClick={() => { const last = exercise.sets.at(-1); if (last) removeSet(exercise.exerciseId, last.id) }}
+              disabled={exercise.sets.length === 1}
+              className="flex h-11 items-center justify-center rounded-full bg-[var(--danger-soft)] text-[var(--danger)] disabled:opacity-30"
+              aria-label="Remover última série"
+            >
+              <Trash2 size={16} aria-hidden />
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  )
+})
+
+interface SetRowProps {
+  exerciseId: string
+  exerciseName: string
+  restSeconds: number
+  set: ActiveSet
+  index: number
+  previous?: { weight: number; reps: number }
+}
+
+const SetRow = memo(function SetRow({ exerciseId, exerciseName, restSeconds, set, index, previous }: SetRowProps) {
+  const updateSet = useSessionStore((state) => state.updateSet)
+  const completeSet = useSessionStore((state) => state.completeSet)
+  const startRest = useTimerStore((state) => state.startRest)
+  const stopRest = useTimerStore((state) => state.stopRest)
+  const best = useContext(BestsContext).get(exerciseId)
+  const number = index + 1
+  const setType = SET_TYPES.find((item) => item.value === (set.setType ?? 'normal'))
+  const typeLabel = setType?.label ?? 'Trabalho'
+  const shortLabel = setType?.shortLabel ?? 'N'
+  const isWarmup = (set.setType ?? 'normal') === 'warmup'
+  const isRecord = set.completed && !isWarmup && recordForSet(best, set.weight, set.reps) != null
+
+  function toggleDone() {
+    const completing = !set.completed
+    completeSet(exerciseId, set.id)
+    if (completing) {
+      startRest(restSeconds)
+      const kind = isWarmup ? null : recordForSet(best, set.weight, set.reps)
+      if (kind) {
+        window.dispatchEvent(new CustomEvent(RECORD_EVENT, {
+          detail: {
+            exercise: exerciseName,
+            detail: kind === 'weight'
+              ? `${formatDecimal(set.weight)} kg × ${set.reps} · maior carga (antes ${formatDecimal(best!.weight)} kg)`
+              : `1RM estimado ${formatDecimal(Math.round(estimateOneRm(set.weight, set.reps) * 10) / 10)} kg (antes ${formatDecimal(Math.round(best!.oneRm * 10) / 10)} kg)`,
+          },
+        }))
+      }
+    } else if (useTimerStore.getState().restRunning) stopRest()
   }
 
   return (
-    <div className="min-h-screen page-content">
-      {/* Floating workout controls */}
-      <div className="sticky top-0 z-30 px-4 pb-4 pt-8 pointer-events-none">
-        <div className="mx-auto mb-3 flex max-w-lg items-center gap-2">
-          <div className="workout-bubble pointer-events-auto flex min-w-0 flex-1 items-center gap-3 rounded-full px-3.5 py-2.5">
-            <div className="h-3 w-3 flex-none rounded-full" style={{ background: active.workoutColor }} />
-            <div className="min-w-0 flex-1">
-              <h1 className="truncate text-sm font-bold text-white">{active.workoutName}</h1>
-              <p className="text-[11px] text-zinc-500">{totalCompleted} / {totalSets} series</p>
+    <div data-completed={set.completed} className={cn(SET_GRID, 'set-table-row p-1')}>
+      <span className="relative flex h-11 items-center justify-center rounded-[10px] text-[14px] font-semibold text-[var(--accent)] focus-within:ring-2 focus-within:ring-[var(--accent)]">
+        <span aria-hidden>{shortLabel}</span>
+        <select
+          value={set.setType ?? 'normal'}
+          onChange={(event) => updateSet(exerciseId, set.id, { setType: event.target.value as typeof set.setType })}
+          className="absolute inset-0 h-full w-full cursor-pointer appearance-none opacity-0"
+          aria-label={`Tipo da série ${number}: ${typeLabel}`}
+        >
+          {SET_TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+        </select>
+      </span>
+      <span className="text-center text-[12px] leading-tight text-[var(--muted)]" aria-label={previous ? `Anterior ${previous.weight} kg por ${previous.reps}` : 'Sem registro anterior'}>
+        {isRecord
+          ? <Trophy size={16} className="mx-auto text-[#ff9f0a]" aria-label="Recorde pessoal" />
+          : previous ? `${formatDecimal(previous.weight)}×${previous.reps}` : '—'}
+      </span>
+      <DecimalInput value={set.weight} onValueChange={(value) => updateSet(exerciseId, set.id, { weight: value })} aria-label={`Carga, série ${number}`} className="set-field" />
+      <DecimalInput integer value={set.reps} onValueChange={(value) => updateSet(exerciseId, set.id, { reps: value })} aria-label={`Repetições, série ${number}`} className="set-field" />
+      <DecimalInput integer max={10} value={set.rir ?? 2} onValueChange={(value) => updateSet(exerciseId, set.id, { rir: value })} aria-label={`RIR, série ${number}`} className="set-field" />
+      <button
+        type="button"
+        onClick={toggleDone}
+        aria-pressed={set.completed}
+        className={cn(
+          'mx-auto flex h-11 w-11 items-center justify-center rounded-full transition-[background-color,transform] duration-200 active:scale-90',
+          set.completed ? 'bg-[var(--success-fill)] text-[var(--on-success)]' : 'text-[var(--muted)] shadow-[inset_0_0_0_1.5px_var(--separator)]'
+        )}
+        aria-label={set.completed ? `Desmarcar série ${number}` : `Concluir série ${number}`}
+      >
+        <Check size={20} strokeWidth={set.completed ? 3 : 2.2} aria-hidden />
+      </button>
+    </div>
+  )
+})
+
+function ReplaceModal({ current, exercises, activeIds, onClose, onPick }: {
+  current: ActiveExercise | null
+  exercises: Exercise[]
+  activeIds: Set<string>
+  onClose: () => void
+  onPick: (exercise: Exercise) => void
+}) {
+  const source = exercises.find((item) => item.id === current?.exerciseId)
+  const candidates = exercises.filter((item) => item.id !== current?.exerciseId && !activeIds.has(item.id))
+  const alternativeNames = new Set((source?.alternatives ?? []).map((name) => name.toLowerCase()))
+  const alternatives = candidates.filter((item) => alternativeNames.has(item.name.toLowerCase()))
+  const sameMuscle = candidates.filter((item) => !alternatives.includes(item) && item.muscleGroup === current?.muscleGroup)
+  const others = candidates.filter((item) => !alternatives.includes(item) && !sameMuscle.includes(item))
+  const groups: Array<[string, Exercise[]]> = [
+    ['Alternativas cadastradas', alternatives],
+    [`Mesmo grupo · ${current?.muscleGroup ?? ''}`, sameMuscle],
+    ['Outros exercícios', others],
+  ]
+
+  return (
+    <Modal open={!!current} onClose={onClose} title="Trocar exercício">
+      <p className="subhead mb-4 text-[var(--muted)]">Máquina ocupada? Escolha outro exercício. As cargas da última vez que você fez o substituto são preenchidas.</p>
+      <div className="max-h-[55vh] space-y-5 overflow-y-auto">
+        {groups.filter(([, items]) => items.length > 0).map(([label, items]) => (
+          <div key={label}>
+            <p className="list-header">{label}</p>
+            <div className="list !bg-[var(--fill)]">
+              {items.map((item) => (
+                <button key={item.id} type="button" onClick={() => onPick(item)} className="grouped-row block min-h-14 w-full px-4 py-3 text-left">
+                  <span className="block text-[17px]">{item.name}</span>
+                  <span className="footnote text-[var(--muted)]">{item.muscleGroup}{item.equipment ? ` · ${item.equipment}` : ''}</span>
+                </button>
+              ))}
             </div>
           </div>
-          <div className="workout-bubble pointer-events-auto flex flex-none items-center gap-1.5 rounded-full px-3.5 py-2.5 text-sm text-zinc-400">
-            <Clock size={14} />
-            <span className="font-mono font-semibold">{formatDuration(workoutSeconds)}</span>
-          </div>
-          <button
-            onClick={() => setConfirmDiscard(true)}
-            className="workout-bubble pointer-events-auto flex h-11 w-11 flex-none items-center justify-center rounded-full text-zinc-600 transition-colors hover:text-rose-400"
-            aria-label="Cancelar treino"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* Progress bubble */}
-        <div className="workout-bubble pointer-events-auto mx-auto max-w-lg rounded-full px-3 py-2">
-          <div className="flex justify-between text-[11px] text-zinc-600 mb-1">
-            <span>{totalCompleted} / {totalSets} séries</span>
-            <span>{Math.round((totalCompleted / Math.max(totalSets, 1)) * 100)}%</span>
-          </div>
-          <div className="h-1.5 w-full rounded-full bg-white/5 overflow-hidden">
-            <div
-              className="h-full rounded-full"
-              style={{ background: active.workoutColor, width: `${(totalCompleted / Math.max(totalSets, 1)) * 100}%`, transition: 'width 220ms ease-out' }}
-            />
-          </div>
-        </div>
+        ))}
       </div>
+    </Modal>
+  )
+}
 
-      {/* Exercises */}
-      <div className="mx-auto max-w-lg space-y-4 px-4 py-4 pb-64">
-        {active.exercises.map((ex) => {
-          const isCollapsed = collapsed[ex.exerciseId]
-          const completedSets = ex.sets.filter((s) => s.completed).length
+function Summary({ summary, onClose }: { summary: SummaryData; onClose: () => void }) {
+  const healthSync = useProfileStore((state) => state.profile?.preferences?.healthSync ?? false)
+  const [heartRate, setHeartRate] = useState<number | null>(null)
+  const [sharing, setSharing] = useState(false)
+  const [shareNote, setShareNote] = useState<string | null>(null)
 
-          return (
-            <Card key={ex.exerciseId} className="overflow-hidden">
-              {/* Exercise header */}
-              <button
-                className="w-full p-4 flex items-center gap-3 text-left"
-                onClick={() => setCollapsed((c) => ({ ...c, [ex.exerciseId]: !c[ex.exerciseId] }))}
-              >
-                <div
-                  className="w-8 h-8 rounded-lg flex items-center justify-center flex-none text-xs font-bold"
-                  style={{ background: `${active.workoutColor}20`, color: active.workoutColor }}
-                >
-                  {completedSets}/{ex.sets.length}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-white text-sm">{ex.exerciseName}</p>
-                  <p className="text-xs text-zinc-500">{ex.muscleGroup}</p>
-                  {ex.notes && <p className="mt-1 line-clamp-1 text-[11px] text-zinc-500">{ex.notes}</p>}
-                </div>
-                {completedSets === ex.sets.length && ex.sets.length > 0 && (
-                  <span className="text-emerald-400 text-xs font-semibold flex items-center gap-1">
-                    <Check size={12} /> Feito
-                  </span>
-                )}
-                {isCollapsed ? <ChevronDown size={16} className="text-zinc-600" /> : <ChevronUp size={16} className="text-zinc-600" />}
-              </button>
+  useEffect(() => {
+    if (!healthSync) return
+    void averageHeartRate(summary.startedAt, summary.finishedAt).then(setHeartRate)
+  }, [healthSync, summary.finishedAt, summary.startedAt])
 
-              {!isCollapsed && (
-                <div className="space-y-2 px-3 pb-4 sm:px-4">
-                  {/* Column headers */}
-                  <div className="mb-1 grid grid-cols-[18px_minmax(68px,1fr)_minmax(68px,1fr)_32px_32px] gap-1 px-1 text-[9px] text-zinc-600">
-                    <span className="text-center">#</span>
-                    <span className="text-center font-medium">PESO</span>
-                    <span className="text-center font-medium">REPS</span>
-                    <span />
-                    <span />
-                  </div>
+  const stats: Array<[string, string]> = [
+    [formatVolume(summary.volume), 'Volume'],
+    [formatDuration(summary.duration), 'Tempo'],
+    [`${summary.sets}`, 'Séries'],
+    heartRate ? [`${heartRate} bpm`, 'FC média'] : [`+${summary.xp}`, 'XP'],
+  ]
 
-                  {ex.sets.map((set, idx) => (
-                      <div
-                        key={set.id}
-                        className="grid grid-cols-[18px_minmax(68px,1fr)_minmax(68px,1fr)_32px_32px] gap-1 items-center rounded-xl px-1.5 py-2.5 transition-colors"
-                        style={set.completed
-                          ? { background: 'rgba(0,200,150,0.08)', border: '1px solid rgba(0,200,150,0.18)' }
-                          : { background: 'rgba(255,255,255,0.03)' }
-                        }
-                      >
-                        <span className="text-[11px] text-zinc-600 text-center font-mono leading-none">{idx + 1}</span>
+  async function share() {
+    setSharing(true)
+    setShareNote(null)
+    try {
+      const blob = await renderShareCard({
+        eyebrow: format(summary.finishedAt, "EEEE, d 'de' MMMM", { locale: ptBR }).replace(/^./, (c) => c.toUpperCase()),
+        title: summary.workoutName,
+        subtitle: 'Treino concluído',
+        stats: stats.map(([value, label]) => ({ label, value })),
+        highlight: summary.prs > 0 ? `${summary.prs} recorde${summary.prs > 1 ? 's' : ''} pessoal${summary.prs > 1 ? 'is' : ''}` : undefined,
+      })
+      const result = await shareImage(blob, `workoutpro-${format(summary.finishedAt, 'yyyy-MM-dd')}.png`, `${summary.workoutName} concluído no WorkoutPro`)
+      if (result === 'downloaded') setShareNote('Imagem salva. Poste nos Stories quando quiser.')
+    } catch {
+      setShareNote('Não foi possível gerar a imagem.')
+    } finally {
+      setSharing(false)
+    }
+  }
 
-                        <NumberInput
-                          value={set.weight}
-                          step={2.5}
-                          onChange={(v) => updateSet(ex.exerciseId, set.id, { weight: v })}
-                        />
-
-                        <NumberInput
-                          value={set.reps}
-                          onChange={(v) => updateSet(ex.exerciseId, set.id, { reps: v })}
-                        />
-
-                        <button
-                          onClick={() => handleCompleteSet(ex.exerciseId, set.id)}
-                          className="flex h-8 w-8 flex-none items-center justify-center rounded-xl transition-colors"
-                          style={set.completed
-                            ? { background: '#00c896', color: '#080809' }
-                            : { background: 'rgba(255,255,255,0.06)', color: '#71717a' }
-                          }
-                        >
-                          <Check size={15} />
-                        </button>
-
-                        <button
-                          onClick={() => removeSet(ex.exerciseId, set.id)}
-                          disabled={ex.sets.length <= 1}
-                          className="flex h-8 w-8 flex-none items-center justify-center rounded-xl transition-colors disabled:pointer-events-none disabled:opacity-30"
-                          style={{ background: 'rgba(244,63,94,0.1)', color: '#f43f5e' }}
-                          aria-label="Remover serie"
-                          title={ex.sets.length <= 1 ? 'Mantenha pelo menos uma serie' : 'Remover serie'}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    ))}
-
-                  {/* Add set */}
-                  <button
-                    onClick={() => {
-                      const last = ex.sets[ex.sets.length - 1]
-                      addSet(ex.exerciseId, {
-                        weight: last?.weight ?? 0,
-                        reps: last?.reps ?? 0,
-                        rpe: null,
-                      })
-                    }}
-                    className="w-full py-2 rounded-xl border border-dashed border-white/10 text-xs text-zinc-500 hover:text-white hover:border-white/20 transition-colors flex items-center justify-center gap-1"
-                  >
-                    <Plus size={12} />
-                    Adicionar Série
-                  </button>
-
-                  {/* Rest timer */}
-                  <div className="mt-3 pt-3 border-t border-white/5">
-                    {ex.notes && (
-                      <div className="mb-3 rounded-2xl bg-[var(--surface-2)] p-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Notas</p>
-                        <p className="mt-1 text-xs text-white">{ex.notes}</p>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2 mb-2">
-                      <Timer size={12} className="text-zinc-600" />
-                      <span className="text-xs text-zinc-500">Descanso</span>
-                    </div>
-                    <RestPresetPicker
-                      currentSeconds={ex.restSeconds}
-                      onSelect={(s) => setRestSeconds(ex.exerciseId, s)}
-                    />
-                  </div>
-                </div>
-              )}
-            </Card>
-          )
-        })}
-      </div>
-
-      {/* Finish button */}
-      <div className="fixed bottom-28 left-0 right-0 z-30 flex justify-center px-4 pointer-events-none">
-        <Button
-          size="lg"
-          className="w-full max-w-sm pointer-events-auto shadow-2xl shadow-indigo-500/20"
-          onClick={handleFinish}
-          disabled={finishing}
-        >
-          {finishing ? (
-            <span className="flex items-center gap-2">
-              <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-              Finalizando...
-            </span>
-          ) : (
-            <>
-              <Trophy size={18} />
-              Finalizar Treino
-            </>
-          )}
-        </Button>
-      </div>
-
-      {/* Rest timer overlay */}
-      <RestTimerOverlay />
-
-      {/* Discard modal */}
-      <Modal open={confirmDiscard} onClose={() => setConfirmDiscard(false)} title="Descartar treino">
-        <p className="text-sm text-zinc-400 mb-6">
-          Tem certeza? Todo o progresso deste treino será perdido.
+  return (
+    <div className="apple-page page-narrow flex min-h-dvh items-center !pb-10">
+      <div className="rise-in w-full text-center">
+        <span className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-b from-[#ffd60a] to-[#ff9f0a] text-[#1d1d1f]" aria-hidden><Trophy size={36} strokeWidth={2} /></span>
+        <p className="eyebrow mt-8">{summary.workoutName}</p>
+        <h1 className="display mt-1">Treino concluído</h1>
+        <p className="lede mx-auto mt-3 max-w-xs">
+          {summary.prs > 0
+            ? `Você bateu ${summary.prs} recorde${summary.prs > 1 ? 's' : ''} pessoal${summary.prs > 1 ? 'is' : ''} hoje.`
+            : 'Consistência registrada. Bom trabalho.'}
         </p>
-        <div className="flex gap-3">
-          <Button variant="outline" className="flex-1" onClick={() => setConfirmDiscard(false)}>
-            Continuar
-          </Button>
-          <Button
-            variant="danger"
-            className="flex-1"
-            onClick={() => {
-              discardSession()
-              resetWorkoutTimer()
-              router.replace('/workouts')
-            }}
-          >
-            <X size={16} />
-            Descartar
-          </Button>
-        </div>
-      </Modal>
+        <dl className="mt-10 grid grid-cols-2 gap-3 text-left">
+          {stats.map(([value, label]) => (
+            <div key={label} className="tile tile-compact flex flex-col-reverse">
+              <dt className="subhead text-[var(--muted)]">{label}</dt>
+              <dd className="stat text-[28px]">{value}</dd>
+            </div>
+          ))}
+        </dl>
+        <Button size="lg" className="mt-10 w-full" onClick={onClose}>Voltar ao início</Button>
+        <Button size="lg" variant="secondary" className="mt-3 w-full" onClick={share} disabled={sharing}>
+          <Share size={17} aria-hidden />{sharing ? 'Gerando imagem...' : 'Compartilhar'}
+        </Button>
+        {shareNote && <p role="status" className="footnote mt-3 text-[var(--muted)]">{shareNote}</p>}
+        <Link href="/stats" className={buttonClasses({ variant: 'ghost', className: 'mt-2 w-full' })}>Ver progresso</Link>
+      </div>
     </div>
   )
 }
