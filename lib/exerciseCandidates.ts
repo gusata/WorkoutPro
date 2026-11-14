@@ -1,15 +1,15 @@
 /**
  * Exercise candidates for the routine generator.
  *
- * SWAP POINT: `INTERNAL_CANDIDATES` is a small built-in list. When the exercise
- * catalog (lib/exerciseLibrary.ts) lands, replace `catalogCandidates()` below with a
- * mapping from the library entries to `ExerciseCandidate` — nothing else in the
- * generator needs to change. `pattern` is optional: candidates without it are matched
- * by muscle group + mechanic.
+ * Sources, in priority order: the user's exercises, workout templates, the built-in
+ * `INTERNAL_CANDIDATES` (they carry a movement `pattern`, which gives the generator
+ * better variety) and then the whole exercise library (lib/exerciseLibrary.ts),
+ * matched by muscle group + mechanic. Duplicates are removed by normalized name.
  */
 import type { Exercise, MuscleGroup } from '@/types'
 import { WORKOUT_TEMPLATES } from '@/lib/workoutTemplates'
 import { classifyExercise } from '@/lib/training'
+import { LIBRARY, type LibraryEquipment } from '@/lib/exerciseLibrary'
 
 export type EquipmentKind = 'barra' | 'halteres' | 'maquina' | 'cabo' | 'peso-corporal' | 'kettlebell' | 'elastico'
 export type Mechanic = 'compound' | 'isolation'
@@ -136,8 +136,20 @@ export const INTERNAL_CANDIDATES: ExerciseCandidate[] = INTERNAL_ROWS.map(([name
 }))
 
 /** Replace this with a mapping from lib/exerciseLibrary.ts when it is available. */
+const LIBRARY_EQUIPMENT_KIND: Record<LibraryEquipment, EquipmentKind> = {
+  barra: 'barra', halteres: 'halteres', maquina: 'maquina', polia: 'cabo', 'peso-corporal': 'peso-corporal',
+  kettlebell: 'kettlebell', elastico: 'elastico', smith: 'maquina',
+}
+
+export const LIBRARY_CANDIDATES: ExerciseCandidate[] = LIBRARY.map((item) => ({
+  name: item.name,
+  muscleGroup: item.muscleGroup,
+  equipment: LIBRARY_EQUIPMENT_KIND[item.equipment],
+  mechanic: item.mechanic === 'composto' ? 'compound' : 'isolation',
+}))
+
 function catalogCandidates(): ExerciseCandidate[] {
-  return INTERNAL_CANDIDATES
+  return [...INTERNAL_CANDIDATES, ...LIBRARY_CANDIDATES]
 }
 
 const EQUIPMENT_WORDS: Array<[EquipmentKind, string[]]> = [

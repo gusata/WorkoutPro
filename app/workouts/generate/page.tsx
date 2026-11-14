@@ -1,5 +1,6 @@
 'use client'
 
+import { findLibraryMatch, suggestLibraryAlternatives } from '@/lib/exerciseLibrary'
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, RefreshCw, Shuffle, Trash2 } from 'lucide-react'
@@ -67,8 +68,10 @@ export default function GenerateRoutinePage() {
       const resolved = resolvePlanExercises(plan, exercises)
       const ids = new Map(resolved.existing)
       for (const candidate of resolved.toCreate) {
+        const library = findLibraryMatch({ name: candidate.name })
         const id = await addExercise({
           name: candidate.name, muscleGroup: candidate.muscleGroup, notes: noteForCandidate(candidate), equipment: EQUIPMENT_SHORT[candidate.equipment],
+          ...(library ? { libraryId: library.id, alternatives: suggestLibraryAlternatives(library).map((item) => item.name) } : {}),
         })
         ids.set(normalizeExerciseName(candidate.name), id)
       }
