@@ -1,4 +1,5 @@
 import { differenceInCalendarDays, endOfWeek, getISODay, startOfWeek, subWeeks } from 'date-fns'
+import { findLibraryMatch } from '@/lib/exerciseLibrary'
 import type { CompletedSet, Exercise, MuscleGroup, MuscleTargetRange, UserPreferences, WorkoutSession } from '@/types'
 
 /** Every trainable muscle (everything in MuscleGroup except 'Full Body'). */
@@ -46,7 +47,9 @@ export type SecondaryResolver = (exercise: Exercise) => readonly MuscleGroup[] |
 
 const defaultSecondaries: SecondaryResolver = (exercise) => {
   const value = (exercise as Exercise & { secondaryMuscles?: unknown }).secondaryMuscles
-  return Array.isArray(value) ? (value as MuscleGroup[]) : null
+  if (Array.isArray(value)) return value as MuscleGroup[]
+  // Exercises linked to (or named like) a library entry inherit its secondary muscles.
+  return findLibraryMatch(exercise)?.secondaryMuscles ?? null
 }
 
 export interface MuscleOptions {

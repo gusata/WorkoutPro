@@ -10,10 +10,10 @@ function sets(count: number, type: CompletedSet['setType'] = 'normal'): Complete
   return Array.from({ length: count }, (_, index) => ({ id: `${type}-${index}`, weight: 50, reps: 10, rpe: null, setType: type, completedAt: new Date() }))
 }
 
-const bench = makeExercise({ id: 'bench', name: 'Supino', muscleGroup: 'Peitoral' })
+const bench = makeExercise({ id: 'bench', name: 'Empurrar teste', muscleGroup: 'Peitoral' })
 const benchWithSecondaries = { ...bench, secondaryMuscles: ['Tríceps', 'Ombros', 'Peitoral'] as MuscleGroup[] } as Exercise
-const burpee = makeExercise({ id: 'burpee', name: 'Burpee', muscleGroup: 'Full Body' })
-const squat = makeExercise({ id: 'squat', name: 'Agachamento', muscleGroup: 'Quadríceps' })
+const burpee = makeExercise({ id: 'burpee', name: 'Circuito teste', muscleGroup: 'Full Body' })
+const squat = makeExercise({ id: 'squat', name: 'Perna teste', muscleGroup: 'Quadríceps' })
 
 // Wednesday 2026-08-19; the week starts Monday 2026-08-17.
 const WED = new Date('2026-08-19T20:00:00-03:00')
@@ -113,5 +113,15 @@ describe('weekly report and nudge', () => {
   it('stays quiet when everything in the routine is on target', () => {
     const done = [...sessions, makeSession({ id: 'thu', finishedAt: new Date('2026-08-20T19:00:00-03:00'), exercises: [{ exerciseId: 'squat', sets: sets(8) }] })]
     expect(lateWeekNudge(weeklyMuscleReport(done, [bench, squat], getMuscleTargets(undefined), FRI), FRI)).toBeNull()
+  })
+})
+
+describe('secondary muscles from the exercise library', () => {
+  it('uses the linked library entry when the exercise has no own secondaries', async () => {
+    const { muscleContributions } = await import('@/lib/muscleVolume')
+    const { getLibraryExercise } = await import('@/lib/exerciseLibrary')
+    const bench = getLibraryExercise('supino-reto-barra')!
+    const contributions = muscleContributions({ id: 'x', name: 'Meu supino', muscleGroup: 'Peitoral', notes: '', libraryId: bench.id, createdAt: new Date(), updatedAt: new Date() })
+    for (const muscle of bench.secondaryMuscles) expect(contributions).toContainEqual({ muscle, weight: 0.5 })
   })
 })
