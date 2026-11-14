@@ -5,6 +5,7 @@ import { db } from '@/lib/db'
 import type { Workout, Exercise } from '@/types'
 import { generateId } from '@/lib/utils'
 import { queueSync } from '@/lib/syncQueue'
+import { findUserExerciseForLibrary, getLibraryExercise, libraryExerciseToDraft } from '@/lib/exerciseLibrary'
 
 interface WorkoutStore {
   workouts: Workout[]
@@ -16,6 +17,8 @@ interface WorkoutStore {
   deleteWorkout: (id: string) => Promise<void>
   addExercise: (e: Omit<Exercise, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>
   updateExercise: (id: string, updates: Partial<Exercise>) => Promise<void>
+  /** Adds a library exercise to the user's exercises, reusing (and linking) an existing one instead of duplicating. */
+  addLibraryExercise: (libraryId: string) => Promise<string>
   deleteExercise: (id: string) => Promise<void>
   addExerciseToWorkout: (workoutId: string, exerciseId: string) => Promise<void>
   removeExerciseFromWorkout: (workoutId: string, exerciseId: string) => Promise<void>
@@ -98,6 +101,17 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     set((s) => ({
       exercises: s.exercises.map((e) => (e.id === id ? { ...e, ...updates, updatedAt } : e)),
     }))
+  },
+
+  addLibraryExercise: async (libraryId) => {
+    const item = getLibraryExercise(libraryId)
+    if (!item) throw new Error(`Exercício da biblioteca desconhecido: ${libraryId}`)
+    const existing = findUserExerciseForLibrary(get().exercises, item)
+    if (existing) {
+      if (existing.libraryId !== item.id) await get().updateExercise(existing.id, { libraryId: item.id })
+      return existing.id
+    }
+    return get().addExercise(libraryExerciseToDraft(item))
   },
 
   deleteExercise: async (id) => {

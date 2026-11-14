@@ -7,6 +7,8 @@
 - Rotinas guardam séries alvo, faixa de repetições, descanso, supersérie, agenda semanal e regra de progressão por exercício.
 - A execução mostra o treino anterior ao lado da série atual e suporta aquecimento, trabalho, drop set, falha e AMRAP, além de RIR, duplicação e propagação de valores.
 - Exercícios guardam equipamento, ajuste da máquina, alternativas e notas técnicas.
+- Biblioteca de exercícios embutida (`lib/exerciseLibrary.ts` + `lib/exerciseLibraryData.ts`, ~200 exercícios em PT-BR com execução, erros comuns, músculos secundários, equipamento, mecânica e nível). API: `LIBRARY`, `getLibraryExercise(id)`, `searchLibrary(query, filters)`, `findLibraryMatch(exercise)`. Adicionar da biblioteca cria um `Exercise` com `libraryId` (opcional) e reaproveita o exercício já vinculado ou de mesmo nome, sem duplicar. Ids da biblioteca são estáveis: nunca renomeie nem reutilize.
+- Ilustrações: fotos de início/fim do free-exercise-db (domínio público) carregadas sob demanda do jsDelivr, fixadas no commit `FREE_EXERCISE_DB_COMMIT`; não são empacotadas. Sem internet ou sem equivalente, aparece um ícone com o grupo muscular.
 - O Perfil oferece backup JSON completo, importação/exportação CSV compatível com Strong/Hevy e perfil de equipamentos.
 
 ### Regra de progressão
@@ -15,7 +17,7 @@ A progressão dupla é deliberadamente previsível: a carga só sobe quando toda
 
 ### Compatibilidade de dados
 
-Os novos campos são opcionais para que registros legados continuem válidos. O schema Supabase usa `jsonb` para configurações por exercício e arrays para agenda, equipamentos e alternativas. Ao atualizar uma instalação com nuvem, reaplique `supabase/schema.sql` antes de sincronizar os novos campos.
+Os novos campos são opcionais para que registros legados continuem válidos. O schema Supabase usa `jsonb` para configurações por exercício e arrays para agenda, equipamentos e alternativas. Ao atualizar uma instalação com nuvem, reaplique `supabase/schema.sql` antes de sincronizar os novos campos (por exemplo `exercises.library_id`, texto anulável).
 
 > Atualizada em 19/08/2026 a partir do código e das alterações locais do projeto.
 
@@ -195,7 +197,8 @@ O Capacitor reconhece quatro plugins: App, Browser, Local Notifications e Splash
 | `/workouts/new` | Criação manual ou por template. |
 | `/workouts/detail?id=...` | Ordem, exercícios e histórico da ficha. |
 | `/workouts/execute` | Sessão ativa e resumo. |
-| `/exercises/detail?id=...` | PRs e histórico do exercício. |
+| `/exercises/detail?id=...` | PRs, técnica (biblioteca) e histórico do exercício. |
+| `/exercises/library` | Biblioteca de exercícios: busca, filtros e detalhe. |
 | `/stats` | Métricas, gráficos e calendário. |
 | `/achievements` | Conquistas. |
 | `/profile` | Identidade, medidas, tema, conta e backup. |

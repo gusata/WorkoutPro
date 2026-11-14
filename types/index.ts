@@ -52,6 +52,8 @@ export interface Exercise {
   equipment?: string
   machineSettings?: string
   alternatives?: string[]
+  /** Stable id of the bundled exercise library entry (lib/exerciseLibrary.ts) this exercise was added from. */
+  libraryId?: string
   createdAt: Date
   updatedAt: Date
 }

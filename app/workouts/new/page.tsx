@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, ChevronRight, Plus, Search, Sparkles } from 'lucide-react'
+import { BookOpen, Check, ChevronRight, Plus, Search, Sparkles } from 'lucide-react'
 import { useWorkoutStore } from '@/stores/useWorkoutStore'
 import { Button } from '@/components/ui/Button'
 import { Input, Select, TextArea } from '@/components/ui/Input'
@@ -11,6 +11,8 @@ import { Hero, LocalNav } from '@/components/layout/PageHeader'
 import { MUSCLE_GROUPS, readableOn, WORKOUT_COLORS } from '@/lib/utils'
 import { exerciseMatches } from '@/lib/training'
 import { WORKOUT_TEMPLATES, type WorkoutTemplate } from '@/lib/workoutTemplates'
+import { LibraryPicker } from '@/components/library/LibraryPicker'
+import { EQUIPMENT_LABELS, findLibraryMatch, type LibraryExercise } from '@/lib/exerciseLibrary'
 import type { MuscleGroup, WorkoutExerciseConfig } from '@/types'
 
 const WEEKDAYS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
@@ -26,6 +28,7 @@ export default function NewWorkoutPage() {
   const addWorkout = useWorkoutStore((state) => state.addWorkout)
   const addExercise = useWorkoutStore((state) => state.addExercise)
   const updateExercise = useWorkoutStore((state) => state.updateExercise)
+  const addLibraryExercise = useWorkoutStore((state) => state.addLibraryExercise)
   const [name, setName] = useState('')
   const [color, setColor] = useState(WORKOUT_COLORS[0])
   const [selected, setSelected] = useState<string[]>([])
@@ -36,6 +39,7 @@ export default function NewWorkoutPage() {
   const [saving, setSaving] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
+  const [showLibrary, setShowLibrary] = useState(false)
   const [exName, setExName] = useState('')
   const [exMuscle, setExMuscle] = useState<MuscleGroup>(MUSCLE_GROUPS[0])
   const [exNotes, setExNotes] = useState('')
@@ -43,6 +47,13 @@ export default function NewWorkoutPage() {
   const filtered = useMemo(() => exercises.filter((exercise) =>
     (muscle === 'Todos' || exercise.muscleGroup === muscle) && exerciseMatches(exercise.name, query)
   ), [exercises, muscle, query])
+
+  const selectedLibraryIds = useMemo(() => new Set(exercises.filter((exercise) => exercise.libraryId && selected.includes(exercise.id)).map((exercise) => exercise.libraryId!)), [exercises, selected])
+
+  async function addFromLibrary(item: LibraryExercise) {
+    const id = await addLibraryExercise(item.id)
+    if (!selected.includes(id)) toggleExercise(id)
+  }
 
   function toggleExercise(id: string) {
     setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
@@ -65,11 +76,14 @@ export default function NewWorkoutPage() {
     setSaving(true)
     const ids: string[] = []
     for (const item of template.exercises) {
+      const library = findLibraryMatch({ name: item.name })
       const existing = exercises.find((exercise) => exercise.name.toLowerCase() === item.name.toLowerCase())
+        ?? (library ? exercises.find((exercise) => exercise.libraryId === library.id) : undefined)
       if (existing) {
         ids.push(existing.id)
-        if (!existing.notes && item.notes) await updateExercise(existing.id, { notes: item.notes })
-      } else ids.push(await addExercise({ name: item.name, muscleGroup: item.muscleGroup, notes: item.notes }))
+        const updates = { ...(!existing.notes && item.notes ? { notes: item.notes } : {}), ...(library && !existing.libraryId ? { libraryId: library.id } : {}) }
+        if (Object.keys(updates).length) await updateExercise(existing.id, updates)
+      } else ids.push(await addExercise({ name: item.name, muscleGroup: item.muscleGroup, notes: item.notes, ...(library ? { libraryId: library.id, equipment: EQUIPMENT_LABELS[library.equipment] } : {}) }))
     }
     const exerciseConfigs = ids.map((exerciseId) => ({ exerciseId, targetSets: 3, minReps: 8, maxReps: 12, restSeconds: 90, supersetId: null, progression: { type: 'double-progression' as const, increment: 2.5, minimumRir: 1 } }))
     const id = await addWorkout({ name: template.name, color: template.color, icon: 'Dumbbell', exerciseIds: ids, exerciseConfigs, scheduledWeekdays: [] })
@@ -113,7 +127,7 @@ export default function NewWorkoutPage() {
       </section>
 
       <section className="stack-section" aria-labelledby="exercises-title">
-        <div className="mb-4 flex items-end justify-between px-1"><h2 id="exercises-title" className="section-title">Exercícios.</h2><button type="button" onClick={() => setShowCreate(true)} className="link -mb-2.5 text-[17px]"><Plus size={17} aria-hidden />Novo</button></div>
+        <div className="mb-4 flex items-end justify-between px-1"><h2 id="exercises-title" className="section-title">Exercícios.</h2><div className="-mb-2.5 flex gap-4"><button type="button" onClick={() => setShowLibrary(true)} className="link text-[17px]"><BookOpen size={17} aria-hidden />Biblioteca</button><button type="button" onClick={() => setShowCreate(true)} className="link text-[17px]"><Plus size={17} aria-hidden />Novo</button></div></div>
         <label className="relative mb-3 block"><span className="sr-only">Buscar exercício</span><Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted)]" aria-hidden /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar" className="field !pl-11" /></label>
         <div className="scroll-row mb-4" role="group" aria-label="Filtrar por grupo muscular">
           {['Todos', ...MUSCLE_GROUPS].map((item) => <button key={item} type="button" aria-pressed={muscle === item} onClick={() => setMuscle(item)} className="chip">{item}</button>)}
@@ -121,10 +135,11 @@ export default function NewWorkoutPage() {
         <div className="list max-h-[29rem] overflow-y-auto">{filtered.map((exercise) => {
           const checked = selected.includes(exercise.id)
           return <button key={exercise.id} type="button" aria-label={`${checked ? 'Remover' : 'Selecionar'} ${exercise.name}`} onClick={() => toggleExercise(exercise.id)} aria-pressed={checked} className="grouped-row flex min-h-14 w-full items-center gap-4 px-5 py-3 text-left"><span className="min-w-0 flex-1"><span className="block truncate">{exercise.name}</span><span className="footnote text-[var(--muted)]">{exercise.muscleGroup}{exercise.equipment ? ` · ${exercise.equipment}` : ''}</span></span><span aria-hidden className={`flex h-6 w-6 flex-none items-center justify-center rounded-full transition-colors ${checked ? 'bg-[var(--accent-fill)] text-white' : 'shadow-[inset_0_0_0_1.5px_var(--separator)]'}`}>{checked && <Check size={14} strokeWidth={3} />}</span></button>
-        })}{filtered.length === 0 && <p className="subhead p-8 text-center text-[var(--muted)]">Nenhum exercício encontrado.</p>}</div>
+        })}{filtered.length === 0 && <p className="subhead p-8 text-center text-[var(--muted)]">Nenhum exercício encontrado. <button type="button" onClick={() => setShowLibrary(true)} className="text-[var(--accent)]">Procure na biblioteca</button>.</p>}</div>
       </section>
 
       <Modal open={showTemplates} onClose={() => setShowTemplates(false)} title="Modelos"><div className="list !bg-[var(--fill)]">{WORKOUT_TEMPLATES.map((template) => <button key={template.id} type="button" onClick={() => void fromTemplate(template)} disabled={saving} className="grouped-row flex min-h-16 w-full items-center gap-4 px-4 py-3 text-left disabled:opacity-50"><span aria-hidden className="h-8 w-1.5 flex-none rounded-full" style={{ background: template.color }} /><span className="flex-1"><span className="headline block">{template.name}</span><span className="footnote text-[var(--muted)]">{template.frequency} · {template.exercises.length} exercícios</span></span><ChevronRight size={17} className="text-[var(--muted)]" aria-hidden /></button>)}</div></Modal>
+      <Modal open={showLibrary} onClose={() => setShowLibrary(false)} title="Biblioteca"><LibraryPicker inSheet addedIds={selectedLibraryIds} onAdd={addFromLibrary} addLabel="Adicionar à rotina" addedLabel="Na rotina" /></Modal>
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Novo exercício"><div className="space-y-4"><Input label="Nome" value={exName} onChange={(event) => setExName(event.target.value)} /><Select label="Grupo muscular" value={exMuscle} onChange={(event) => setExMuscle(event.target.value as MuscleGroup)} options={MUSCLE_GROUPS.map((item) => ({ value: item, label: item }))} /><TextArea label="Notas" value={exNotes} onChange={(event) => setExNotes(event.target.value)} rows={2} /><Button size="lg" className="w-full" onClick={createExercise} disabled={!exName.trim()}>Criar e selecionar</Button></div></Modal>
     </div>
   )
