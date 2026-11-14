@@ -1,14 +1,20 @@
 'use client'
 
-import { muscleLevel } from '@/lib/insights'
-import type { MuscleGroup } from '@/types'
+import { useState } from 'react'
+import { X } from 'lucide-react'
+import { cn } from '@/lib/cn'
+import {
+  formatSets, INTENSITY_LEGEND, MUSCLES, muscleIntensity, STATUS_LABEL, volumeStatus,
+  type Muscle, type MuscleVolume,
+} from '@/lib/muscleVolume'
+import type { MuscleGroup, MuscleTargetRange } from '@/types'
 
 type Shape =
   | { kind: 'ellipse'; cx: number; cy: number; rx: number; ry: number; rotate?: number }
   | { kind: 'path'; d: string }
 
 interface Region {
-  group: MuscleGroup
+  group: Muscle
   shapes: Shape[]
 }
 
@@ -17,7 +23,12 @@ const mirror = (cx: number, cy: number, rx: number, ry: number, rotate = 0): Sha
   { kind: 'ellipse', cx: 100 - cx, cy, rx, ry, rotate: -rotate },
 ]
 
+// Simplified, hand-drawn geometric figure (viewBox 8 0 84 196), not anatomical art.
 const FRONT: Region[] = [
+  { group: 'Trapézio', shapes: [
+    { kind: 'path', d: 'M45.5 31 Q41 35 35 38.5 Q40.5 40 46 37.5 Z' },
+    { kind: 'path', d: 'M54.5 31 Q59 35 65 38.5 Q59.5 40 54 37.5 Z' },
+  ] },
   { group: 'Ombros', shapes: mirror(31, 47, 8, 7.5, -20) },
   { group: 'Peitoral', shapes: [
     { kind: 'path', d: 'M50 42 C44 40 38 41 36 46 C35 52 38 57 44 58 C47 58 50 56 50 53 Z' },
@@ -55,17 +66,32 @@ const SILHOUETTE =
   'M35 104 Q42 100 49 106 L48 146 Q47 160 46 182 Q44 190 39 190 Q35 188 36 180 Q34 160 35 146 Z ' +
   'M65 104 Q58 100 51 106 L52 146 Q53 160 54 182 Q56 190 61 190 Q65 188 64 180 Q66 160 65 146 Z'
 
-const LEVEL_FILL = ['var(--heat-0)', 'var(--heat-1)', 'var(--heat-3)', 'var(--heat-4)'] as const
+const LEVEL_FILL = ['var(--heat-0)', 'var(--heat-1)', 'var(--heat-2)', 'var(--heat-3)', 'var(--heat-4)'] as const
 
-function Body({ regions, sets, label }: { regions: Region[]; sets: Map<MuscleGroup, number>; label: string }) {
+function Body({ regions, sets, label, selected, onSelect }: {
+  regions: Region[]
+  sets: Map<MuscleGroup, number>
+  label: string
+  selected: Muscle | null
+  onSelect?: (muscle: Muscle) => void
+}) {
   return (
     <figure className="flex flex-col items-center">
-      <svg viewBox="8 0 84 196" className="h-auto w-full max-w-[150px]" aria-hidden>
+      {/* Pointer shortcut only; the list below is the accessible way to pick a muscle. */}
+      <svg viewBox="8 0 84 196" className="h-auto w-full max-w-[170px]" aria-hidden>
         <path d={SILHOUETTE} fill="var(--fill)" />
         {regions.map((region) => {
-          const fill = LEVEL_FILL[muscleLevel(sets.get(region.group) ?? 0)]
+          const fill = LEVEL_FILL[muscleIntensity(sets.get(region.group) ?? 0)]
+          const isSelected = selected === region.group
           return (
-            <g key={region.group} fill={fill} stroke="var(--surface)" strokeWidth={0.8}>
+            <g
+              key={region.group}
+              fill={fill}
+              stroke={isSelected ? 'var(--foreground)' : 'var(--surface)'}
+              strokeWidth={isSelected ? 1.6 : 0.8}
+              onClick={onSelect ? () => onSelect(region.group) : undefined}
+              className={onSelect ? 'cursor-pointer' : undefined}
+            >
               {region.shapes.map((shape, index) =>
                 shape.kind === 'ellipse'
                   ? <ellipse key={index} cx={shape.cx} cy={shape.cy} rx={shape.rx} ry={shape.ry} transform={shape.rotate ? `rotate(${shape.rotate} ${shape.cx} ${shape.cy})` : undefined} />
@@ -80,44 +106,138 @@ function Body({ regions, sets, label }: { regions: Region[]; sets: Map<MuscleGro
   )
 }
 
-const ORDER: MuscleGroup[] = ['Peitoral', 'Costas', 'Ombros', 'Bíceps', 'Tríceps', 'Antebraço', 'Abdômen', 'Trapézio', 'Lombar', 'Glúteo', 'Quadríceps', 'Posterior', 'Panturrilha']
+function Legend() {
+  return (
+    <ul className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-2" aria-label="Legenda: séries por semana">
+      {INTENSITY_LEGEND.map((label, index) => (
+        <li key={label} className="caption numeric flex items-center gap-1.5 text-[var(--muted)]">
+          <span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ background: LEVEL_FILL[index] }} />
+          {index === 0 ? 'Sem séries' : label}
+        </li>
+      ))}
+      <li className="caption text-[var(--muted)]">séries/semana</li>
+    </ul>
+  )
+}
 
-export function MuscleMap({ sets, compact = false }: { sets: Map<MuscleGroup, number>; compact?: boolean }) {
-  const summary = ORDER.map((group) => `${group}: ${Math.round(sets.get(group) ?? 0)} séries`).join(', ')
-  const lagging = ORDER.filter((group) => muscleLevel(sets.get(group) ?? 0) <= 1)
+export interface MuscleMapProps {
+  /** Hard sets per week (or weekly average) per muscle; drives the colors. */
+  sets: Map<MuscleGroup, number>
+  /** Sets and exercises behind each muscle in the period, for the tap-to-see panel. */
+  details?: Map<Muscle, MuscleVolume>
+  /** Weekly target ranges, to show the status in the panel. */
+  targets?: Record<Muscle, MuscleTargetRange>
+  /** "nesta semana", "nas últimas 4 semanas"... */
+  periodLabel?: string
+  /** Weeks covered by `details` (sets are divided by this for the weekly average). */
+  weeks?: number
+  compact?: boolean
+}
+
+export function MuscleMap({ sets, details, targets, periodLabel = 'nos últimos 7 dias', weeks = 1, compact = false }: MuscleMapProps) {
+  const [selected, setSelected] = useState<Muscle | null>(null)
+  const summary = MUSCLES.map((group) => `${group}: ${formatSets(sets.get(group) ?? 0)} séries`).join(', ')
+  const lagging = MUSCLES.filter((group) => (sets.get(group) ?? 0) < 6)
+  const interactive = !compact
+  const toggle = (muscle: Muscle) => setSelected((current) => (current === muscle ? null : muscle))
+
   return (
     <div>
-      <div role="img" aria-label={`Séries por músculo nos últimos 7 dias. ${summary}`} className="grid grid-cols-2 gap-4 px-2">
-        <Body regions={FRONT} sets={sets} label="Frente" />
-        <Body regions={BACK} sets={sets} label="Costas" />
+      <div role="img" aria-label={`Séries por músculo ${periodLabel}${weeks > 1 ? ', média por semana' : ''}. ${summary}`} className="grid grid-cols-2 gap-4 px-2">
+        <Body regions={FRONT} sets={sets} label="Frente" selected={selected} onSelect={interactive ? toggle : undefined} />
+        <Body regions={BACK} sets={sets} label="Costas" selected={selected} onSelect={interactive ? toggle : undefined} />
       </div>
-      <ul className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-2" aria-label="Legenda">
-        {[
-          ['Sem treino', LEVEL_FILL[0]],
-          ['1–5 séries', LEVEL_FILL[1]],
-          ['6–11', LEVEL_FILL[2]],
-          ['12+', LEVEL_FILL[3]],
-        ].map(([label, color]) => (
-          <li key={label} className="caption flex items-center gap-1.5 text-[var(--muted)]">
-            <span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />{label}
-          </li>
-        ))}
-      </ul>
-      {!compact && (
-        <dl className="mt-6 grid grid-cols-2 gap-x-6">
-          {ORDER.map((group) => (
-            <div key={group} className="flex items-baseline justify-between border-t border-[var(--separator)] py-2.5">
-              <dt className="subhead">{group}</dt>
-              <dd className="subhead numeric font-semibold">{Math.round(sets.get(group) ?? 0)}</dd>
-            </div>
-          ))}
-        </dl>
+      <Legend />
+      {interactive && selected && (
+        <MuscleDetail
+          muscle={selected}
+          weekly={sets.get(selected) ?? 0}
+          volume={details?.get(selected)}
+          target={targets?.[selected]}
+          periodLabel={periodLabel}
+          weeks={weeks}
+          onClose={() => setSelected(null)}
+        />
       )}
-      {compact && lagging.length > 0 && lagging.length < ORDER.length && (
+      {interactive && (
+        <>
+          <p className="footnote mt-6 text-[var(--muted)]">Toque em um músculo para ver séries e exercícios.</p>
+          <ul className="mt-2 grid grid-cols-2 gap-x-6" aria-label={`Séries por músculo ${periodLabel}`}>
+            {MUSCLES.map((group) => (
+              <li key={group}>
+                <button
+                  type="button"
+                  aria-pressed={selected === group}
+                  onClick={() => toggle(group)}
+                  className={cn(
+                    'flex min-h-11 w-full items-center justify-between gap-2 border-t border-[var(--separator)] py-2 text-left',
+                    selected === group && 'font-semibold text-[var(--accent)]'
+                  )}
+                >
+                  <span className="subhead flex min-w-0 items-center gap-2">
+                    <span aria-hidden className="h-2 w-2 flex-none rounded-full" style={{ background: LEVEL_FILL[muscleIntensity(sets.get(group) ?? 0)] }} />
+                    <span className="truncate">{group}</span>
+                  </span>
+                  <span className="subhead numeric font-semibold">{formatSets(sets.get(group) ?? 0)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {compact && lagging.length > 0 && lagging.length < MUSCLES.length && (
         <p className="subhead mt-4 text-center text-[var(--muted)]">
-          Pouco estímulo esta semana: <span className="text-[var(--foreground)]">{lagging.slice(0, 4).join(', ')}</span>{lagging.length > 4 ? ` e mais ${lagging.length - 4}` : ''}.
+          Pouco estímulo {periodLabel}: <span className="text-[var(--foreground)]">{lagging.slice(0, 4).join(', ')}</span>{lagging.length > 4 ? ` e mais ${lagging.length - 4}` : ''}.
         </p>
       )}
     </div>
+  )
+}
+
+function MuscleDetail({ muscle, weekly, volume, target, periodLabel, weeks, onClose }: {
+  muscle: Muscle
+  weekly: number
+  volume?: MuscleVolume
+  target?: MuscleTargetRange
+  periodLabel: string
+  weeks: number
+  onClose: () => void
+}) {
+  const total = volume?.sets ?? 0
+  const status = target ? volumeStatus(weekly, target) : null
+  return (
+    <section aria-live="polite" aria-label={`Detalhes de ${muscle}`} className="mt-5 rounded-[var(--radius-md)] bg-[var(--fill)] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="headline">{muscle}</p>
+          <p className="footnote numeric mt-0.5 text-[var(--muted)]">
+            {formatSets(total)} {total === 1 ? 'série' : 'séries'} {periodLabel}
+            {weeks > 1 ? ` · ${formatSets(weekly)}/semana` : ''}
+            {target ? ` · meta ${target.min}–${target.max}` : ''}
+            {status ? ` · ${STATUS_LABEL[status]}` : ''}
+          </p>
+        </div>
+        <button type="button" onClick={onClose} className="-mr-2 -mt-2 flex h-11 w-11 flex-none items-center justify-center rounded-full text-[var(--muted)]" aria-label="Fechar detalhes">
+          <X size={18} aria-hidden />
+        </button>
+      </div>
+      {volume && volume.exercises.length > 0 ? (
+        <ul className="mt-3 space-y-2">
+          {volume.exercises.map((item) => (
+            <li key={item.exerciseId} className="flex items-baseline justify-between gap-3">
+              <span className="subhead min-w-0 truncate">
+                {item.name}
+                {!item.primary && <span className="text-[var(--muted)]"> · indireto</span>}
+              </span>
+              <span className="subhead numeric flex-none text-[var(--muted)]">
+                {item.sets} {item.sets === 1 ? 'série' : 'séries'}{!item.primary ? ` (conta ${formatSets(item.credited)})` : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="subhead mt-2 text-[var(--muted)]">Nenhuma série de trabalho {periodLabel}.</p>
+      )}
+    </section>
   )
 }

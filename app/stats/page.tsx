@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   addMonths, eachDayOfInterval, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, isWithinInterval,
-  startOfMonth, startOfWeek, subDays, subMonths, subWeeks, subYears,
+  startOfDay, startOfMonth, startOfWeek, subDays, subMonths, subWeeks, subYears,
 } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
@@ -20,7 +20,10 @@ import { StrengthCard } from '@/components/insights/StrengthCard'
 import { formatDuration, formatVolume } from '@/lib/utils'
 import { getMonthWeekBuckets, getStatsInterval, getWeeklyBuckets, type StatsPeriod } from '@/lib/statsPeriods'
 import { comparePeriods } from '@/lib/training'
-import { muscleSetsInRange, setsByDay } from '@/lib/insights'
+import { setsByDay } from '@/lib/insights'
+import { getMuscleTargets, muscleVolumeInRange, weekRange, weeklyMuscleReport } from '@/lib/muscleVolume'
+import { MuscleVolumeBars } from '@/components/insights/MuscleVolumeBars'
+import type { MuscleGroup } from '@/types'
 import { ACHIEVEMENTS } from '@/lib/achievements'
 
 const PERIODS: { value: StatsPeriod; label: string }[] = [
@@ -69,7 +72,9 @@ export default function StatsPage() {
   const [now] = useState(() => new Date())
   const [period, setPeriod] = useState<StatsPeriod>('month')
   const [chartMode, setChartMode] = useState<'volume' | 'frequency'>('volume')
-  const [muscleRange, setMuscleRange] = useState<'7' | '30'>('7')
+  const [muscleRange, setMuscleRange] = useState<'week' | 'month'>('week')
+  const [volumeWeek, setVolumeWeek] = useState<'current' | 'previous'>('current')
+  const preferences = useProfileStore((state) => state.profile?.preferences)
   const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()))
   const [selectedDate, setSelectedDate] = useState(() => new Date())
 
@@ -88,12 +93,24 @@ export default function StatsPage() {
     return map
   }, [finished])
   const dailySets = useMemo(() => setsByDay(sessions), [sessions])
-  const muscles = useMemo(() => muscleSetsInRange(sessions, exercises, subDays(now, Number(muscleRange)), now), [exercises, muscleRange, now, sessions])
+  const muscleTargets = useMemo(() => getMuscleTargets(preferences), [preferences])
+  const muscleDetails = useMemo(() => {
+    const finishedOnly = sessions.filter((session) => session.finishedAt)
+    if (muscleRange === 'week') {
+      const { start, end } = weekRange(now)
+      return muscleVolumeInRange(finishedOnly, exercises, start, end)
+    }
+    return muscleVolumeInRange(finishedOnly, exercises, startOfDay(subDays(now, 27)), now)
+  }, [exercises, muscleRange, now, sessions])
   const muscleScale = useMemo(() => {
-    // Normalise 30 days to a weekly average so the same color scale applies.
-    if (muscleRange === '7') return muscles
-    return new Map([...muscles].map(([group, sets]) => [group, (sets / 30) * 7]))
-  }, [muscleRange, muscles])
+    // The month view is shown as a weekly average so the same color scale applies.
+    const weeks = muscleRange === 'week' ? 1 : 4
+    return new Map<MuscleGroup, number>([...muscleDetails].map(([group, entry]) => [group, entry.sets / weeks]))
+  }, [muscleDetails, muscleRange])
+  const volumeRows = useMemo(
+    () => weeklyMuscleReport(sessions.filter((session) => session.finishedAt), exercises, muscleTargets, now, volumeWeek === 'current' ? 0 : 1),
+    [exercises, muscleTargets, now, sessions, volumeWeek]
+  )
 
   const selectedSessions = sessionsByDay.get(format(selectedDate, 'yyyy-MM-dd')) ?? []
   const workoutNames = useMemo(() => new Map(workouts.map((workout) => [workout.id, workout.name])), [workouts])
@@ -194,11 +211,30 @@ export default function StatsPage() {
       </section>
 
       <section id="musculos" aria-labelledby="muscles-title" className="stack-section scroll-mt-20">
-        <SectionHeader id="muscles-title" title="Músculos." subtitle={muscleRange === '7' ? 'Séries de trabalho nos últimos 7 dias.' : 'Média semanal dos últimos 30 dias.'} />
+        <SectionHeader id="muscles-title" title="Músculos." subtitle={muscleRange === 'week' ? 'Séries de trabalho nesta semana.' : 'Média semanal das últimas 4 semanas.'} />
         <div className="tile">
-          <SegmentedControl label="Intervalo do mapa muscular" value={muscleRange} onChange={setMuscleRange} options={[{ value: '7', label: '7 dias' }, { value: '30', label: '30 dias' }]} className="mb-7" />
-          <MuscleMap sets={muscleScale} />
-          <p className="footnote mt-4 text-[var(--muted)]">Faixa de referência para hipertrofia: 10 a 20 séries por músculo por semana.</p>
+          <SegmentedControl label="Período do mapa muscular" value={muscleRange} onChange={setMuscleRange} options={[{ value: 'week', label: 'Semana' }, { value: 'month', label: 'Mês' }]} className="mb-7" />
+          <MuscleMap
+            sets={muscleScale}
+            details={muscleDetails}
+            targets={muscleTargets}
+            periodLabel={muscleRange === 'week' ? 'nesta semana' : 'nas últimas 4 semanas'}
+            weeks={muscleRange === 'week' ? 1 : 4}
+          />
+          <p className="footnote mt-4 text-[var(--muted)]">Aquecimentos não contam. Músculos secundários contam meia série; exercícios de corpo inteiro, meia série para cada músculo.</p>
+        </div>
+      </section>
+
+      <section id="volume-semanal" aria-labelledby="volume-title" className="stack-section scroll-mt-20">
+        <SectionHeader
+          id="volume-title"
+          title="Volume semanal."
+          subtitle="Séries de trabalho por músculo e a faixa-alvo."
+          action={<Link href="/settings#volume-muscular" className="link -mb-2.5 flex-none text-[17px]">Metas<ChevronRight size={17} aria-hidden /></Link>}
+        />
+        <div className="tile">
+          <SegmentedControl label="Semana do volume" value={volumeWeek} onChange={setVolumeWeek} options={[{ value: 'current', label: 'Esta semana' }, { value: 'previous', label: 'Semana passada' }]} className="mb-6" />
+          <MuscleVolumeBars rows={volumeRows} />
         </div>
       </section>
 

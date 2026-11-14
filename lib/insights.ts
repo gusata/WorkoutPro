@@ -1,8 +1,7 @@
 import { differenceInCalendarDays, format, startOfDay } from 'date-fns'
 import { estimateOneRm } from '@/lib/exerciseHistory'
+import { muscleVolumeInRange } from '@/lib/muscleVolume'
 import type { CompletedSet, Exercise, MuscleGroup, Workout, WorkoutSession } from '@/types'
-
-const MAJOR_GROUPS: MuscleGroup[] = ['Peitoral', 'Costas', 'Ombros', 'Quadríceps', 'Posterior', 'Glúteo']
 
 function isWorkSet(set: Pick<CompletedSet, 'setType'>) {
   return (set.setType ?? 'normal') !== 'warmup'
@@ -16,29 +15,18 @@ function finished(sessions: WorkoutSession[]) {
 // Muscle map
 // ---------------------------------------------------------------------------
 
-/** Hard (non warm-up) sets per muscle group between two dates. Full-body work counts half to each major group. */
+/**
+ * Hard (non warm-up) sets per muscle group between two dates. Counting rules
+ * (secondary muscles, full body) live in lib/muscleVolume.ts.
+ */
 export function muscleSetsInRange(
   sessions: WorkoutSession[],
   exercises: Exercise[],
   start: Date,
   end: Date
 ): Map<MuscleGroup, number> {
-  const groupById = new Map(exercises.map((exercise) => [exercise.id, exercise.muscleGroup]))
-  const totals = new Map<MuscleGroup, number>()
-  const add = (group: MuscleGroup, value: number) => totals.set(group, (totals.get(group) ?? 0) + value)
-  for (const session of finished(sessions)) {
-    const date = new Date(session.finishedAt!)
-    if (date < start || date > end) continue
-    for (const item of session.exercises) {
-      const group = groupById.get(item.exerciseId)
-      if (!group) continue
-      const sets = item.sets.filter(isWorkSet).length
-      if (sets === 0) continue
-      if (group === 'Full Body') MAJOR_GROUPS.forEach((major) => add(major, sets * 0.5))
-      else add(group, sets)
-    }
-  }
-  return totals
+  const volume = muscleVolumeInRange(finished(sessions), exercises, start, end)
+  return new Map([...volume].map(([muscle, entry]) => [muscle as MuscleGroup, entry.sets]))
 }
 
 /** 0 = untrained, 1 = below maintenance (<6), 2 = productive (6-11), 3 = high (12+ weekly sets). */

@@ -145,6 +145,14 @@ export interface UserPreferences {
   maxHeartRate?: number | null
   /** Heart rate under which a rest counts as recovered; default from resting / max HR. */
   recoveryHeartRate?: number | null
+  /** Weekly hard-set target range per muscle; missing muscles use the defaults. */
+  muscleTargets?: Partial<Record<MuscleGroup, MuscleTargetRange>>
+}
+
+/** Weekly hard working sets considered productive for a muscle. */
+export interface MuscleTargetRange {
+  min: number
+  max: number
 }
 
 export type CardioActivity =

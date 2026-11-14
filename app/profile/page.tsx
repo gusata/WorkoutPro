@@ -11,14 +11,13 @@ import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { LocalNav, SectionHeader } from '@/components/layout/PageHeader'
 import { SupabaseAccountCard } from '@/components/auth/SupabaseAccountCard'
-import { LineChart } from '@/components/insights/LineChart'
+import { WeightTrendTile } from '@/components/insights/WeightTrendTile'
 import { useMediaUrl } from '@/components/training/MediaViewer'
 import { getLevelFromXp, levelTitle } from '@/lib/gamification'
 import { exportData, importData, parseBackup, type ParsedBackup } from '@/lib/backup'
 import { formatDate, formatDecimal, parseDecimal } from '@/lib/utils'
 import { exportSessionsCsv, importTrainingCsv } from '@/lib/csvInterop'
 import { listMedia } from '@/lib/media'
-import { trendPer30Days } from '@/lib/insights'
 import type { BodyMeasurement, MediaItem } from '@/types'
 import { format } from 'date-fns'
 import { ACHIEVEMENTS } from '@/lib/achievements'
@@ -84,10 +83,8 @@ export default function ProfilePage() {
 
   const weightPoints = useMemo(() => measurements
     .filter((m) => m.weight != null)
-    .slice(0, 24)
     .reverse()
     .map((m) => ({ date: new Date(m.date), value: m.weight as number })), [measurements])
-  const weightTrend = trendPer30Days(weightPoints)
 
   async function saveName() {
     if (nameInput.trim()) {
@@ -226,31 +223,7 @@ export default function ProfilePage() {
       {/* Body */}
       <section aria-labelledby="measurements-title" className="stack-section">
         <SectionHeader id="measurements-title" title="Corpo." action={<Button size="sm" variant="tinted" onClick={() => setShowMeasModal(true)} className="-mb-1"><Plus size={16} aria-hidden />Registrar</Button>} />
-        {latestWeight && (
-          <div className="tile mb-3">
-            <div className="flex items-end justify-between gap-4">
-              <div>
-                <p className="subhead text-[var(--muted)]">Peso</p>
-                <p className="stat text-[40px]">{formatDecimal(latestWeight.value)}<span className="stat-unit">kg</span></p>
-              </div>
-              {weightTrend != null && (
-                <p className="subhead text-right text-[var(--muted)]">
-                  {weightTrend >= 0 ? '+' : ''}{formatDecimal(Math.round(weightTrend * 10) / 10)} kg/mês
-                </p>
-              )}
-            </div>
-            {weightPoints.length >= 2 && (
-              <div className="mt-4">
-                <LineChart
-                  points={weightPoints}
-                  height={120}
-                  format={(value) => `${formatDecimal(value)} kg`}
-                  label={`Evolução do peso: de ${formatDecimal(weightPoints[0].value)} kg a ${formatDecimal(latestWeight.value)} kg.`}
-                />
-              </div>
-            )}
-          </div>
-        )}
+        {latestWeight && <WeightTrendTile points={weightPoints} className="tile mb-3" />}
 
         <PhotosTile photos={photos} />
 
