@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { ChevronRight, Plus, RefreshCw } from 'lucide-react'
 import { format, formatDistanceToNow, isToday, subDays } from 'date-fns'
@@ -16,7 +16,8 @@ import { HeartRateCard } from '@/components/health/HeartRateCard'
 import { useHealthStore } from '@/stores/useHealthStore'
 import { useCardioStore } from '@/stores/useCardioStore'
 import { useProfileStore } from '@/stores/useProfileStore'
-import { computeReadiness } from '@/lib/readiness'
+import { useTodayReadiness } from '@/components/health/useReadiness'
+import { ReadinessRecommendation } from '@/components/health/ReadinessRecommendation'
 import { cardioLabel, cardioMinutesInWeek, DEFAULT_CARDIO_GOAL, formatDistance, formatMinutes } from '@/lib/cardio'
 import { trendPer30Days } from '@/lib/insights'
 import { formatDecimal } from '@/lib/utils'
@@ -26,7 +27,6 @@ export default function HealthPage() {
   const health = useHealthStore()
   const cardio = useCardioStore((state) => state.sessions)
   const profile = useProfileStore((state) => state.profile)
-  const sessions = useProfileStore((state) => state.sessions)
   const connect = useHealthConnect()
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<CardioSession | null>(null)
@@ -35,16 +35,7 @@ export default function HealthPage() {
   useLiveHealth()
 
   const lastNight = health.sleep.at(-1) ?? null
-  const recentSets = useMemo(() => sessions
-    .filter((session) => session.finishedAt && now.getTime() - new Date(session.finishedAt).getTime() < 86_400_000)
-    .reduce((total, session) => total + session.exercises.reduce((sum, item) => sum + item.sets.filter((set) => (set.setType ?? 'normal') !== 'warmup').length, 0), 0), [now, sessions])
-  const readiness = useMemo(() => computeReadiness({
-    hrv: health.hrv,
-    restingHr: health.restingHr,
-    sleep: lastNight ? { asleep: lastNight.asleep, deep: lastNight.minutes.deep, rem: lastNight.minutes.rem, hasStages: lastNight.hasStages, end: lastNight.end } : null,
-    recentSets,
-    now,
-  }), [health.hrv, health.restingHr, lastNight, now, recentSets])
+  const readiness = useTodayReadiness(now)
 
   const cardioGoal = profile?.preferences?.weeklyGoals?.cardioMinutes ?? DEFAULT_CARDIO_GOAL
   const cardioMinutes = cardioMinutesInWeek(cardio, now)
@@ -122,6 +113,7 @@ export default function HealthPage() {
                 <p className="subhead mt-1.5 text-[var(--muted)]">{readiness.advice}</p>
               </div>
             </div>
+            <ReadinessRecommendation readiness={readiness} />
             <dl className="mt-6">
               {readiness.components.map((component) => (
                 <div key={component.key} className="flex items-center gap-3 border-t border-[var(--separator)] py-3">

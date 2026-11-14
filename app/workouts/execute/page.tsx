@@ -13,6 +13,7 @@ import { Modal } from '@/components/ui/Modal'
 import { RestPresetPicker, RestTimerOverlay } from '@/components/timer/RestTimer'
 import { PlateCalculator } from '@/components/training/PlateCalculator'
 import { VideoModal } from '@/components/training/MediaViewer'
+import { ReadinessLoadNote, useReadinessSuggestion } from '@/components/health/ReadinessLoadNote'
 import { useProfileStore } from '@/stores/useProfileStore'
 import { useSessionStore } from '@/stores/useSessionStore'
 import { useTimerStore } from '@/stores/useTimerStore'
@@ -212,6 +213,7 @@ export default function ExecutePage() {
           </div>
         </header>
 
+        <ReadinessLoadNote sessionId={active.sessionId} />
         <div className="mt-5 grid gap-3 xl:grid-cols-2">
           {active.exercises.map((exercise) => (
             <ExerciseCard
@@ -369,10 +371,11 @@ const ExerciseCard = memo(function ExerciseCard({
       setRestSeconds: state.setRestSeconds, insertWarmupSets: state.insertWarmupSets,
     }))
   )
-  const suggestion = useMemo(
+  const baseSuggestion = useMemo(
     () => getProgressionSuggestion(exercise.previousSets ?? [], exercise.targetMaxReps ?? 12, exercise.progression),
     [exercise.previousSets, exercise.targetMaxReps, exercise.progression]
   )
+  const suggestion = useReadinessSuggestion(baseSuggestion)
   const panelId = `exercise-${exercise.exerciseId}-sets`
   const optionsId = `exercise-${exercise.exerciseId}-options`
   const doneCount = exercise.sets.filter((set) => set.completed).length
