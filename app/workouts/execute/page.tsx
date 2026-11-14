@@ -11,6 +11,7 @@ import { Button, buttonClasses } from '@/components/ui/Button'
 import { DecimalInput } from '@/components/ui/DecimalInput'
 import { Modal } from '@/components/ui/Modal'
 import { RestPresetPicker, RestTimerOverlay } from '@/components/timer/RestTimer'
+import { LiveHeartRate, RestHeartHint } from '@/components/workout/LiveHeartRate'
 import { PlateCalculator } from '@/components/training/PlateCalculator'
 import { VideoModal } from '@/components/training/MediaViewer'
 import { useProfileStore } from '@/stores/useProfileStore'
@@ -200,6 +201,7 @@ export default function ExecutePage() {
               <p className="footnote numeric flex gap-3 text-[var(--muted)]">
                 <WorkoutClock />
                 <span>{formatVolume(totals.volume)}</span>
+                <LiveHeartRate />
               </p>
             </div>
             <div className="text-right">
@@ -241,6 +243,7 @@ export default function ExecutePage() {
           <Button onClick={finishRequest} disabled={finishing}>{finishing ? 'Salvando...' : 'Finalizar'}</Button>
         </div>
         <RestTimerOverlay />
+        <RestHeartHint />
 
         {record && (
           <div role="status" aria-live="polite" className="pointer-events-none fixed left-0 right-0 z-50 flex justify-center px-4" style={{ top: 'max(0.75rem, env(safe-area-inset-top))' }}>

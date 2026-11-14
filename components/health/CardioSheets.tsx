@@ -128,7 +128,7 @@ export function CardioDetail({ session, onClose, onEdit }: { session: CardioSess
         <div className="pb-2">
           <p className="eyebrow">{format(new Date(session.startedAt), "EEEE, d 'de' MMMM · HH:mm", { locale: ptBR }).replace(/^./, (c) => c.toUpperCase())}</p>
           <h2 className="display mt-1">{cardioLabel(session.activity)}</h2>
-          <p className="subhead mt-1 text-[var(--muted)]">{session.source === 'health' ? `Importado${session.sourceName ? ` de ${session.sourceName}` : ''}` : 'Registrado manualmente'}</p>
+          <p className="subhead mt-1 text-[var(--muted)]">{session.source === 'health' ? `Importado${session.sourceName ? ` de ${session.sourceName}` : ''}` : session.sourceName ? 'Registrado ao vivo no app' : 'Registrado manualmente'}</p>
 
           <dl className="mt-6 grid grid-cols-2 gap-x-4 gap-y-5">
             {[

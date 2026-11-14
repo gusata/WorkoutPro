@@ -225,6 +225,9 @@ function parsePreferences(value: unknown): UserPreferences {
     reminders: reminders ? { enabled: reminders.enabled === true, timeOfDay: isFiniteNumber(reminders.timeOfDay) ? reminders.timeOfDay : null } : undefined,
     healthSync: value.healthSync === true,
     barWeight: isFiniteNumber(value.barWeight) ? value.barWeight : undefined,
+    birthYear: isFiniteNumber(value.birthYear) ? value.birthYear : undefined,
+    maxHeartRate: isFiniteNumber(value.maxHeartRate) ? value.maxHeartRate : undefined,
+    recoveryHeartRate: isFiniteNumber(value.recoveryHeartRate) ? value.recoveryHeartRate : undefined,
   }
 }
 

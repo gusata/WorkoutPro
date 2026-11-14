@@ -143,6 +143,8 @@ export interface UserPreferences {
   birthYear?: number | null
   /** Measured maximum heart rate; overrides the age-based estimate. */
   maxHeartRate?: number | null
+  /** Heart rate under which a rest counts as recovered; default from resting / max HR. */
+  recoveryHeartRate?: number | null
 }
 
 export type CardioActivity =
