@@ -21,7 +21,9 @@
     "android": "npm run build && npx cap sync android && powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:JAVA_HOME='C:\\Program Files\\Android\\Android Studio\\jbr'; $env:ANDROID_HOME=Join-Path $env:LOCALAPPDATA 'Android\\Sdk'; npx cap run android\"",
     "android:sync": "npm run build && npx cap sync android",
     "android:check": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:JAVA_HOME='C:\\Program Files\\Android\\Android Studio\\jbr'; $env:ANDROID_HOME=Join-Path $env:LOCALAPPDATA 'Android\\Sdk'; Set-Location android; .\\gradlew.bat --no-daemon testDebugUnitTest lintDebug\"",
-    "android:bundle": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:JAVA_HOME='C:\\Program Files\\Android\\Android Studio\\jbr'; $env:ANDROID_HOME=Join-Path $env:LOCALAPPDATA 'Android\\Sdk'; Set-Location android; .\\gradlew.bat --no-daemon bundleRelease\""
+    "android:bundle": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:JAVA_HOME='C:\\Program Files\\Android\\Android Studio\\jbr'; $env:ANDROID_HOME=Join-Path $env:LOCALAPPDATA 'Android\\Sdk'; Set-Location android; .\\gradlew.bat --no-daemon bundleRelease\"",
+    "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
+    "android:install": "npm run android:apk && adb install -r android/app/build/outputs/apk/debug/app-debug.apk"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.0",
