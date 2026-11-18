@@ -1,0 +1,42 @@
+# Creates a routine with "Supino Reto" and opens its detail page.
+# env: ROUTINE_NAME (required), ALL_WEEKDAYS ('1' schedules it on every weekday, for reminders).
+appId: com.workoutpro.app
+---
+- tapOn: "Aba Treinos"
+- tapOn: "Criar treino"
+- extendedWaitUntil:
+    visible: "Novo treino"
+    timeout: 10000
+- tapOn: "Nome da rotina"
+- inputText: ${ROUTINE_NAME}
+- hideKeyboard
+- runFlow:
+    label: Schedule on every weekday
+    when:
+      true: ${typeof ALL_WEEKDAYS !== 'undefined' && String(ALL_WEEKDAYS) === '1'}
+    commands:
+      - scrollUntilVisible:
+          element: "domingo"
+          direction: DOWN
+      - tapOn: "domingo"
+      - tapOn: "segunda"
+      - tapOn: "terça"
+      - tapOn: "quarta"
+      - tapOn: "quinta"
+      - tapOn: "sexta"
+      - tapOn: "sábado"
+- scrollUntilVisible:
+    element: "Buscar"
+    direction: DOWN
+- tapOn: "Buscar"
+- inputText: "Supino Reto"
+- hideKeyboard
+- tapOn: "Selecionar Supino Reto"
+- scrollUntilVisible:
+    element: "Criar"
+    direction: UP
+- tapOn: "Criar"
+- extendedWaitUntil:
+    visible: ${ROUTINE_NAME}
+    timeout: 10000
+- assertVisible: "Iniciar"

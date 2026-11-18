@@ -15,6 +15,8 @@ const eslintConfig = defineConfig([
     "android/app/src/main/assets/**",
     "android/.gradle/**",
     "next-env.d.ts",
+    // Agent git worktrees (each a full checkout with its own build output).
+    ".claude/**",
   ]),
 ]);
 

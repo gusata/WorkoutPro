@@ -24,12 +24,12 @@ function sessionOn(day: string, sets: CompletedSet[], exerciseId = 'exercise-1',
 }
 
 describe('warm-up generator', () => {
-  it('ramps up to a heavy working weight in 2.5 kg steps', () => {
-    expect(generateWarmupSets(100)).toEqual([{ weight: 40, reps: 10 }, { weight: 60, reps: 5 }, { weight: 80, reps: 3 }])
+  it('ramps up to a heavy working weight starting with the empty bar', () => {
+    expect(generateWarmupSets(100)).toEqual([{ weight: 20, reps: 10 }, { weight: 40, reps: 8 }, { weight: 60, reps: 5 }, { weight: 80, reps: 3 }])
   })
 
   it('uses fewer steps for light loads and never goes below the bar', () => {
-    expect(generateWarmupSets(40)).toEqual([{ weight: 20, reps: 8 }, { weight: 30, reps: 4 }])
+    expect(generateWarmupSets(40)).toEqual([{ weight: 20, reps: 10 }, { weight: 27.5, reps: 5 }])
     expect(generateWarmupSets(25)).toEqual([{ weight: 20, reps: 10 }])
     expect(generateWarmupSets(0)).toEqual([])
   })

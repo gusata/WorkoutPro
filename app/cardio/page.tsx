@@ -9,8 +9,10 @@ import { Hero, LocalNav, SectionHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { MiniBars } from '@/components/health/charts'
 import { CardioDetail, CardioForm } from '@/components/health/CardioSheets'
+import { LiveCardio } from '@/components/health/LiveCardio'
 import { useCardioStore } from '@/stores/useCardioStore'
 import { useProfileStore } from '@/stores/useProfileStore'
+import { useCardioNewLink } from '@/components/layout/useCardioNewLink'
 import { cardioLabel, DEFAULT_CARDIO_GOAL, formatDistance, formatMinutes, formatPace, maxHeartRate, ZONES } from '@/lib/cardio'
 import type { CardioSession } from '@/types'
 
@@ -21,6 +23,7 @@ export default function CardioPage() {
   const [editing, setEditing] = useState<CardioSession | null>(null)
   const [selected, setSelected] = useState<CardioSession | null>(null)
   const [now] = useState(() => new Date())
+  useCardioNewLink(() => { setEditing(null); setFormOpen(true) })
   const goal = preferences?.weeklyGoals?.cardioMinutes ?? DEFAULT_CARDIO_GOAL
   const maxHr = maxHeartRate(preferences)
 
@@ -61,6 +64,8 @@ export default function CardioPage() {
         title="Cardio."
         lede={`${thisWeek.minutes} de ${goal} minutos nesta semana${thisWeek.distance > 0 ? ` · ${formatDistance(thisWeek.distance)}` : ''}.`}
       />
+
+      <LiveCardio onSaved={setSelected} />
 
       <section className="tile mt-8" aria-label="Minutos por semana">
         <p className="subhead text-[var(--muted)]">Minutos por semana</p>

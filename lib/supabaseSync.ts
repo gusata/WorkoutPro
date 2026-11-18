@@ -7,6 +7,8 @@ import { queueFullSync, queueSync } from '@/lib/syncQueue'
 import { reportError } from '@/lib/observability'
 import { reconcileProfile } from '@/lib/profileStats'
 import { clearSyncCursors, hasSyncCursor, readCursor, writeCursor } from '@/lib/syncCursor'
+import { parseDiscomfort } from '@/lib/discomfort'
+import { reviveBlockHistory, reviveTrainingBlock } from '@/lib/preferences'
 import type {
   AchievementRecord, BodyMeasurement, CardioSession, Exercise, MuscleGroup, SessionExercise,
   SyncConflict, SyncEntity, SyncQueueItem, UserProfile, Workout, WorkoutSession,
@@ -19,7 +21,7 @@ interface CloudProfile {
   preferences?: UserProfile['preferences'] | null; training_block?: (Omit<NonNullable<UserProfile['trainingBlock']>, 'startDate'> & { startDate: string }) | null
 }
 interface CloudWorkout extends CloudBase { name: string; color: string; icon: string; exercise_ids: string[]; exercise_configs?: Workout['exerciseConfigs']; scheduled_weekdays?: number[]; created_at: string }
-interface CloudExercise extends CloudBase { name: string; muscle_group: string; notes: string; equipment?: string; machine_settings?: string; alternatives?: string[]; created_at: string }
+interface CloudExercise extends CloudBase { name: string; muscle_group: string; notes: string; equipment?: string; machine_settings?: string; alternatives?: string[]; library_id?: string | null; created_at: string }
 interface CloudWorkoutSession extends CloudBase {
   workout_id: string; started_at: string; finished_at: string | null; duration: number
   exercises: SessionExercise[]; total_volume: number; xp_earned: number; notes: string
@@ -110,10 +112,14 @@ function serializeSessionExercises(exercises: SessionExercise[]) {
 }
 
 function reviveSessionExercises(exercises: SessionExercise[] | null): SessionExercise[] {
-  return (exercises ?? []).map((exercise) => ({
-    exerciseId: exercise.exerciseId,
-    sets: exercise.sets.map((set) => ({ ...set, completedAt: new Date(set.completedAt) })),
-  }))
+  return (exercises ?? []).map((exercise) => {
+    const discomfort = parseDiscomfort(exercise.discomfort)
+    return {
+      exerciseId: exercise.exerciseId,
+      sets: exercise.sets.map((set) => ({ ...set, completedAt: new Date(set.completedAt) })),
+      ...(discomfort ? { discomfort } : {}),
+    }
+  })
 }
 
 async function getCurrentUserId(client: SupabaseClient) {
@@ -187,6 +193,7 @@ function payloadFor(
     const item = value as Exercise
     return { id: item.id, user_id: userId, name: item.name, muscle_group: item.muscleGroup, notes: item.notes,
       equipment: item.equipment ?? '', machine_settings: item.machineSettings ?? '', alternatives: item.alternatives ?? [],
+      library_id: item.libraryId ?? null,
       created_at: isoDate(item.createdAt), updated_at: isoDate(item.updatedAt), deleted_at: null }
   }
   if (entity === 'sessions') {
@@ -345,8 +352,8 @@ function fromCloudProfile(item: CloudProfile): UserProfile {
   return { id: 'profile', name: item.name, level: item.level, xp: item.xp, totalVolume: item.total_volume,
     totalWorkouts: item.total_workouts, streak: item.streak, longestStreak: item.longest_streak,
     availableEquipment: item.available_equipment ?? [], lastWorkoutDate: item.last_workout_date ? new Date(item.last_workout_date) : null,
-    preferences: item.preferences ?? {},
-    trainingBlock: item.training_block ? { ...item.training_block, startDate: new Date(item.training_block.startDate) } : null,
+    preferences: reviveBlockHistory(item.preferences ?? {}),
+    trainingBlock: item.training_block ? reviveTrainingBlock({ ...item.training_block, startDate: new Date(item.training_block.startDate) }) : null,
     createdAt: new Date(item.created_at), updatedAt: new Date(item.updated_at) }
 }
 function fromCloudWorkout(item: CloudWorkout): Workout {
@@ -357,6 +364,7 @@ function fromCloudWorkout(item: CloudWorkout): Workout {
 function fromCloudExercise(item: CloudExercise): Exercise {
   return { id: item.id, name: item.name, muscleGroup: item.muscle_group as MuscleGroup, notes: item.notes,
     equipment: item.equipment || undefined, machineSettings: item.machine_settings || undefined, alternatives: item.alternatives ?? [],
+    libraryId: item.library_id || undefined,
     createdAt: new Date(item.created_at), updatedAt: new Date(item.updated_at) }
 }
 function fromCloudSession(item: CloudWorkoutSession): WorkoutSession {

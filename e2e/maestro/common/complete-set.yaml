@@ -1,0 +1,15 @@
+# Fills and completes one working set. env: SET (1-based number), WEIGHT, REPS.
+appId: com.workoutpro.app
+---
+- scrollUntilVisible:
+    element: "Concluir série ${SET}"
+    direction: DOWN
+- tapOn: "Carga, série ${SET}"
+- eraseText
+- inputText: ${WEIGHT}
+- tapOn: "Repetições, série ${SET}"
+- eraseText
+- inputText: ${REPS}
+- hideKeyboard
+- tapOn: "Concluir série ${SET}"
+- assertVisible: "Desmarcar série ${SET}"

@@ -1,11 +1,11 @@
 // Bump VERSION when the caching strategy changes; hashed build assets never need it.
-const VERSION = 'v4'
+const VERSION = 'v5'
 const STATIC_CACHE = `workoutpro-static-${VERSION}`
 const PAGE_CACHE = `workoutpro-pages-${VERSION}`
 const KEEP = new Set([STATIC_CACHE, PAGE_CACHE])
 
 // trailingSlash: true in next.config, so pages live at "/route/".
-const APP_SHELL = ['/dashboard/', '/workouts/', '/stats/', '/achievements/', '/profile/', '/settings/', '/photos/', '/recap/', '/health/', '/sleep/', '/cardio/', '/manifest.webmanifest', '/icons/icon-192.png']
+const APP_SHELL = ['/dashboard/', '/workouts/', '/stats/', '/achievements/', '/profile/', '/settings/', '/photos/', '/recap/', '/health/', '/sleep/', '/cardio/', '/exercises/library/', '/manifest.webmanifest', '/icons/icon-192.png']
 const OFFLINE_FALLBACK = '/dashboard/'
 const NAVIGATION_TIMEOUT_MS = 3500
 const MAX_STATIC_ENTRIES = 150
@@ -121,7 +121,7 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification(data.title || 'WorkoutPro', {
       body: data.body || '',
       icon: '/icons/icon-192.png',
-      badge: '/icons/icon-192.png',
+      badge: '/icons/badge-96.png',
       vibrate: [200, 100, 200],
     })
   )

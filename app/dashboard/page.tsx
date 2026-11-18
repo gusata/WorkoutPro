@@ -13,8 +13,7 @@ import { useCardioStore } from '@/stores/useCardioStore'
 import { useHealthStore } from '@/stores/useHealthStore'
 import { ScoreRing } from '@/components/health/charts'
 import { HeartRateChip } from '@/components/health/HeartRateCard'
-import { useLiveHealth } from '@/components/health/useLiveHealth'
-import { computeReadiness } from '@/lib/readiness'
+import { useTodayReadiness } from '@/components/health/useReadiness'
 import { cardioMinutesInWeek, DEFAULT_CARDIO_GOAL } from '@/lib/cardio'
 import { buttonClasses } from '@/components/ui/Button'
 import { Hero, LocalNav, SectionHeader } from '@/components/layout/PageHeader'
@@ -22,6 +21,7 @@ import { MuscleMap } from '@/components/insights/MuscleMap'
 import { formatDate, formatDecimal, formatVolume } from '@/lib/utils'
 import { getEffectiveGoals, getBlockProgress } from '@/lib/preferences'
 import { getDeloadAdvice, muscleSetsInRange } from '@/lib/insights'
+import { getMuscleTargets, lateWeekNudge, weeklyMuscleReport } from '@/lib/muscleVolume'
 import { reminderMessage, workoutsForWeekday } from '@/lib/reminders'
 import type { Exercise, Workout, WorkoutSession } from '@/types'
 
@@ -78,12 +78,8 @@ export default function Dashboard() {
   const active = useSessionStore((state) => state.active)
   const startSession = useSessionStore((state) => state.startSession)
   const cardio = useCardioStore((state) => state.sessions)
-  const healthSleep = useHealthStore((state) => state.sleep)
-  const healthHrv = useHealthStore((state) => state.hrv)
-  const healthRhr = useHealthStore((state) => state.restingHr)
   const heartToday = useHealthStore((state) => state.heartToday)
   const stepsToday = useHealthStore((state) => state.steps.find((day) => day.date.toDateString() === new Date().toDateString())?.value ?? null)
-  useLiveHealth()
   const [starting, setStarting] = useState(false)
   const [now] = useState(() => new Date())
 
@@ -140,16 +136,11 @@ export default function Dashboard() {
 
   const muscles = useMemo(() => muscleSetsInRange(sessions, exercises, subDays(now, 7), now), [exercises, now, sessions])
   const deload = useMemo(() => getDeloadAdvice(sessions, exercises, now), [exercises, now, sessions])
-  const readiness = useMemo(() => {
-    const night = healthSleep.at(-1)
-    const recentSets = sessions
-      .filter((session) => session.finishedAt && now.getTime() - new Date(session.finishedAt).getTime() < 86_400_000)
-      .reduce((total, session) => total + setCount(session), 0)
-    return computeReadiness({
-      hrv: healthHrv, restingHr: healthRhr, recentSets, now,
-      sleep: night ? { asleep: night.asleep, deep: night.minutes.deep, rem: night.minutes.rem, hasStages: night.hasStages, end: night.end } : null,
-    })
-  }, [healthHrv, healthRhr, healthSleep, now, sessions])
+  const muscleNudge = useMemo(() => lateWeekNudge(
+    weeklyMuscleReport(sessions.filter((session) => session.finishedAt), exercises, getMuscleTargets(profile?.preferences), now),
+    now
+  ), [exercises, now, profile?.preferences, sessions])
+  const readiness = useTodayReadiness(now)
   const cardioMinutes = cardioMinutesInWeek(cardio, now)
   const cardioGoal = profile?.preferences?.weeklyGoals?.cardioMinutes ?? DEFAULT_CARDIO_GOAL
   const trainedToday = week.days.find((day) => isSameDay(day.day, now))?.trained ?? false
@@ -240,7 +231,7 @@ export default function Dashboard() {
           <span className="min-w-0 flex-1">
             <span className="eyebrow block">Prontidão</span>
             <span className="headline mt-0.5 block">{readiness.headline}</span>
-            <span className="footnote mt-0.5 block text-[var(--muted)]">{readiness.components.filter((item) => item.key !== 'load').map((item) => item.detail).join(' · ')}</span>
+            <span className="footnote mt-0.5 block text-[var(--muted)]">{[readiness.recommendation.label, ...readiness.recommendation.reasons.slice(0, 2).map((item) => item.text)].join(' · ')}</span>
           </span>
           <ChevronRight size={18} className="flex-none text-[var(--muted)]" aria-hidden />
         </Link>
@@ -341,6 +332,12 @@ export default function Dashboard() {
       <section aria-labelledby="muscles-title" className="stack-section">
         <SectionHeader id="muscles-title" title="Músculos." subtitle="Séries nos últimos 7 dias." href="/stats#musculos" />
         <div className="tile">
+          {muscleNudge && (
+            <Link href="/stats#volume-semanal" className="subhead mb-6 flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--warning-soft)] px-4 py-3">
+              <span className="min-w-0 flex-1">{muscleNudge.message}</span>
+              <ChevronRight size={17} className="flex-none text-[var(--muted)]" aria-hidden />
+            </Link>
+          )}
           <MuscleMap sets={muscles} compact />
         </div>
       </section>

@@ -42,6 +42,7 @@ create table if not exists public.exercises (
   equipment text not null default '',
   machine_settings text not null default '',
   alternatives text[] not null default '{}',
+  library_id text,
   created_at timestamptz not null,
   updated_at timestamptz not null default now(),
   deleted_at timestamptz,
@@ -131,6 +132,8 @@ alter table public.exercises add column if not exists deleted_at timestamptz;
 alter table public.exercises add column if not exists equipment text not null default '';
 alter table public.exercises add column if not exists machine_settings text not null default '';
 alter table public.exercises add column if not exists alternatives text[] not null default '{}';
+-- Exercise library link (lib/exerciseLibrary.ts). Nullable; reapply this file before syncing app versions that send it.
+alter table public.exercises add column if not exists library_id text;
 
 alter table public.workout_sessions add column if not exists updated_at timestamptz not null default now();
 alter table public.workout_sessions add column if not exists deleted_at timestamptz;

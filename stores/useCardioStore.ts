@@ -4,7 +4,7 @@ import { create } from 'zustand'
 import { db } from '@/lib/db'
 import { queueSync } from '@/lib/syncQueue'
 import { generateId } from '@/lib/utils'
-import { activityFromHealthType, isDuplicateCardio, timeInZones } from '@/lib/cardio'
+import { activityFromHealthType, isDuplicateCardio, isOwnHealthWorkout, timeInZones } from '@/lib/cardio'
 import type { HealthWorkout } from '@/lib/health'
 import type { CardioSession } from '@/types'
 
@@ -88,6 +88,7 @@ export const useCardioStore = create<CardioStore>((set, get) => ({
     const dismissed = new Set(readDismissed())
     const fresh: CardioSession[] = []
     for (const workout of workouts) {
+      if (isOwnHealthWorkout(workout)) continue
       const activity = activityFromHealthType(workout.type)
       if (!activity || workout.duration < 120) continue
       const candidate = { externalId: workout.externalId, startedAt: workout.startedAt, activity }

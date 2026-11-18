@@ -7,6 +7,7 @@ import { useTimerStore } from '@/stores/useTimerStore'
 import { CircularProgress } from '@/components/ui/Progress'
 import { formatDuration, REST_PRESETS } from '@/lib/utils'
 import { cn } from '@/lib/cn'
+import { haptic } from '@/lib/haptics'
 
 export function RestTimerOverlay() {
   const { restSeconds, restTotal, restRunning } = useTimerStore(
@@ -35,29 +36,41 @@ export function RestTimerOverlay() {
       className="fixed left-0 right-0 z-40 flex justify-center px-3"
       style={{ bottom: 'calc(max(0.75rem, env(safe-area-inset-bottom)) + 5.5rem)' }}
     >
-      <section aria-label="Descanso" className="toast-enter flex w-full max-w-md items-center gap-3 rounded-[30px] bg-[#1d1d1f] p-2.5 pl-3 text-[#f5f5f7] shadow-[var(--shadow-float)]">
+      <section aria-label="Descanso" data-testid="rest-timer" className="toast-enter flex w-full max-w-md items-center gap-3 rounded-[30px] bg-[#1d1d1f] p-2.5 pl-3 text-[#f5f5f7] shadow-[var(--shadow-float)]">
         <CircularProgress value={restTotal - restSeconds} max={restTotal} size={50} strokeWidth={5} color="#2997ff">
           <span className="numeric text-[13px] font-semibold text-[#f5f5f7]" aria-hidden>{restSeconds}</span>
         </CircularProgress>
 
         <div className="min-w-0 flex-1">
           <p className="caption font-semibold text-[#a1a1a6]">Descanso</p>
-          <p className="stat whitespace-nowrap text-[24px] leading-7 text-[#f5f5f7]" role="timer" aria-live="off" aria-label={formatDuration(restSeconds)}>{Math.floor(restSeconds / 60)}:{String(restSeconds % 60).padStart(2, '0')}</p>
+          <p className="stat whitespace-nowrap text-[24px] leading-7 text-[#f5f5f7]" role="timer" aria-live="off" aria-label={`Descanso restante ${formatDuration(restSeconds)}`} data-testid="rest-remaining">{Math.floor(restSeconds / 60)}:{String(restSeconds % 60).padStart(2, '0')}</p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-1.5">
           <button
             type="button"
-            onClick={() => extendRest(15)}
-            className="numeric flex h-11 min-w-12 items-center justify-center rounded-full bg-white/12 px-3.5 text-[15px] font-medium text-[#f5f5f7] transition-transform active:scale-95"
-            aria-label="Adicionar 15 segundos"
+            onClick={() => { haptic('selection'); extendRest(-15) }}
+            disabled={restSeconds <= 15}
+            data-testid="rest-shorten"
+            className="numeric flex h-11 min-w-12 items-center justify-center rounded-full bg-white/12 px-3 text-[15px] font-medium text-[#f5f5f7] transition-transform active:scale-95 disabled:opacity-35"
+            aria-label="Tirar 15 segundos"
           >
-            +15s
+            −15
           </button>
           <button
             type="button"
-            onClick={stopRest}
-            className="flex h-11 items-center justify-center gap-1.5 rounded-full bg-[var(--accent-fill)] px-4 text-[15px] font-medium text-[var(--on-accent)] transition-transform active:scale-95"
+            onClick={() => { haptic('selection'); extendRest(15) }}
+            data-testid="rest-extend"
+            className="numeric flex h-11 min-w-12 items-center justify-center rounded-full bg-white/12 px-3 text-[15px] font-medium text-[#f5f5f7] transition-transform active:scale-95"
+            aria-label="Adicionar 15 segundos"
+          >
+            +15
+          </button>
+          <button
+            type="button"
+            onClick={() => { haptic('light'); stopRest() }}
+            data-testid="rest-skip"
+            className="flex h-11 items-center justify-center gap-1.5 rounded-full bg-[var(--accent-fill)] px-3.5 text-[15px] font-medium text-[var(--on-accent)] transition-transform active:scale-95"
           >
             <SkipForward size={16} aria-hidden />
             Pular

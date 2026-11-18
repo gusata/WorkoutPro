@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">WorkoutPro</string>
+    <string name="tile_label">Treino atual</string>
+    <string name="tile_description">Exercício e série do treino em andamento no celular</string>
+    <string name="tile_tap_to_open">Toque para abrir</string>
+    <string name="tile_rest_until">Descanso até %1$s</string>
+    <string name="channel_ongoing">Treino em andamento</string>
+
+    <string name="idle_title">Abra um treino no celular</string>
+    <string name="idle_start">Iniciar treino de hoje</string>
+    <string name="idle_sent">Pedido enviado. Se o celular estiver bloqueado, toque no aviso dele.</string>
+    <string name="phone_unreachable">Celular fora de alcance</string>
+
+    <string name="set_of">Série %1$d de %2$d</string>
+    <string name="warmup">Aquecimento</string>
+    <string name="previous">Anterior %1$s kg × %2$d</string>
+    <string name="weight_unit">kg</string>
+    <string name="reps_unit">reps</string>
+    <string name="set_done">Série feita</string>
+    <string name="rotary_hint">Toque no valor e gire para ajustar</string>
+    <string name="decrease_weight">Diminuir carga</string>
+    <string name="increase_weight">Aumentar carga</string>
+    <string name="decrease_reps">Diminuir repetições</string>
+    <string name="increase_reps">Aumentar repetições</string>
+
+    <string name="rest">Descanso</string>
+    <string name="ongoing_rest_template">Descanso #timer#</string>
+    <string name="rest_add">+15 s</string>
+    <string name="rest_skip">Pular</string>
+    <string name="next_label">Próximo: %1$s</string>
+    <string name="next_detail">%1$s · %2$s kg × %3$d</string>
+    <string name="all_done">Tudo feito</string>
+    <string name="finish_hint">Finalize o treino</string>
+
+    <string name="finish">Finalizar</string>
+    <string name="finish_title">Finalizar treino?</string>
+    <string name="finish_text">Só as séries concluídas entram no histórico.</string>
+    <string name="progress">%1$d/%2$d séries</string>
+    <string name="heart_rate">%1$d bpm</string>
+    <string name="heart_rate_unknown">-- bpm</string>
+    <string name="permission_hr">Permita os sensores para ver a frequência cardíaca</string>
+</resources>

@@ -4,28 +4,35 @@ import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRe
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  Check, ChevronDown, Copy, Flame, Layers3, MoreHorizontal, NotebookPen, Play, Plus, Replace, Scale, Share, Timer, Trash2, Trophy, Video, X,
+  Check, ChevronDown, Copy, Layers3, MoreHorizontal, NotebookPen, Play, Plus, Replace, Scale, Share, Timer, Trash2, Trophy, Video, X,
 } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { Button, buttonClasses } from '@/components/ui/Button'
 import { DecimalInput } from '@/components/ui/DecimalInput'
 import { Modal } from '@/components/ui/Modal'
 import { RestPresetPicker, RestTimerOverlay } from '@/components/timer/RestTimer'
+import { LiveHeartRate, RestHeartHint } from '@/components/workout/LiveHeartRate'
 import { PlateCalculator } from '@/components/training/PlateCalculator'
 import { VideoModal } from '@/components/training/MediaViewer'
+import { ReadinessLoadNote, useReadinessSuggestion } from '@/components/health/ReadinessLoadNote'
+import { AutoWarmup, DiscomfortOption, ExerciseTrainingHints, WarmupOptions } from '@/components/training/ExerciseTrainingAids'
 import { useProfileStore } from '@/stores/useProfileStore'
 import { useSessionStore } from '@/stores/useSessionStore'
 import { useTimerStore } from '@/stores/useTimerStore'
 import { useWorkoutStore } from '@/stores/useWorkoutStore'
-import { generateWarmupSets, getProgressionSuggestion, SET_TYPES } from '@/lib/training'
+import { getProgressionSuggestion, SET_TYPES } from '@/lib/training'
 import { bestsByExercise, recordForSet, type ExerciseBest } from '@/lib/insights'
 import { estimateOneRm, lastSetsForExercise } from '@/lib/exerciseHistory'
 import { saveMedia } from '@/lib/media'
 import { renderShareCard, shareImage } from '@/lib/shareCard'
 import { averageHeartRate } from '@/lib/health'
 import { DEFAULT_BAR_WEIGHT } from '@/lib/preferences'
+import { buildLiveStatus } from '@/lib/liveStatus'
 import { formatDecimal, formatDuration, formatVolume } from '@/lib/utils'
 import { cn } from '@/lib/cn'
+import { haptic } from '@/lib/haptics'
+import { CircularProgress } from '@/components/ui/Progress'
+import { Confetti, CountUp } from '@/components/workout/Celebration'
 import type { ActiveExercise, ActiveSession, ActiveSet, Exercise } from '@/types'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -94,7 +101,7 @@ export default function ExecutePage() {
     function onRecord(event: Event) {
       const detail = (event as CustomEvent<Omit<RecordToastData, 'id'>>).detail
       setRecord({ ...detail, id: Date.now() })
-      if ('vibrate' in navigator) navigator.vibrate?.([30, 60, 30, 60, 120])
+      haptic('success')
     }
     window.addEventListener(RECORD_EVENT, onRecord)
     return () => window.removeEventListener(RECORD_EVENT, onRecord)
@@ -117,7 +124,7 @@ export default function ExecutePage() {
   const totals = useMemo(() => {
     const sets = active?.exercises.flatMap((item) => item.sets) ?? []
     const done = sets.filter((item) => item.completed)
-    return { all: sets.length, done: done.length, volume: done.reduce((sum, item) => sum + item.weight * item.reps, 0) }
+    return { all: sets.length, done: done.length, volume: done.filter((item) => item.setType !== 'warmup').reduce((sum, item) => sum + item.weight * item.reps, 0) }
   }, [active])
 
   const toggleCollapsed = useCallback((exerciseId: string) => {
@@ -200,6 +207,7 @@ export default function ExecutePage() {
               <p className="footnote numeric flex gap-3 text-[var(--muted)]">
                 <WorkoutClock />
                 <span>{formatVolume(totals.volume)}</span>
+                <LiveHeartRate />
               </p>
             </div>
             <div className="text-right">
@@ -212,6 +220,7 @@ export default function ExecutePage() {
           </div>
         </header>
 
+        <ReadinessLoadNote sessionId={active.sessionId} />
         <div className="mt-5 grid gap-3 xl:grid-cols-2">
           {active.exercises.map((exercise) => (
             <ExerciseCard
@@ -238,9 +247,10 @@ export default function ExecutePage() {
             <strong className="numeric block text-[17px] font-semibold leading-5">{progress}%<span className="ml-1 text-[13px] font-normal text-[var(--muted)]">concluído</span></strong>
             <span className="footnote numeric text-[var(--muted)]">{formatVolume(totals.volume)} levantados</span>
           </div>
-          <Button onClick={finishRequest} disabled={finishing}>{finishing ? 'Salvando...' : 'Finalizar'}</Button>
+          <Button onClick={() => { haptic('medium'); finishRequest() }} disabled={finishing}>{finishing ? 'Salvando...' : 'Finalizar'}</Button>
         </div>
         <RestTimerOverlay />
+        <RestHeartHint />
 
         {record && (
           <div role="status" aria-live="polite" className="pointer-events-none fixed left-0 right-0 z-50 flex justify-center px-4" style={{ top: 'max(0.75rem, env(safe-area-inset-top))' }}>
@@ -295,23 +305,8 @@ export default function ExecutePage() {
 
 /** Pushes "what now / what next" to the Android ongoing notification (lock screen). */
 function useLiveStatus(active: ActiveSession | null) {
-  const status = useMemo(() => {
-    if (!active) return null
-    const steps = active.exercises.flatMap((exercise) =>
-      exercise.sets.map((set, index) => ({ exercise, set, index }))
-    )
-    const pendingIndex = steps.findIndex((step) => !step.set.completed)
-    const describe = (step: (typeof steps)[number] | undefined) => step
-      ? `${step.exercise.exerciseName} · série ${step.index + 1} de ${step.exercise.sets.length} · ${formatDecimal(step.set.weight)} kg × ${step.set.reps}`
-      : 'Último passo: finalizar o treino'
-    return {
-      workoutName: active.workoutName,
-      current: pendingIndex < 0 ? 'Tudo feito. Finalize o treino.' : describe(steps[pendingIndex]),
-      next: pendingIndex < 0 ? 'Finalizar o treino' : describe(steps[pendingIndex]),
-      doneSets: steps.filter((step) => step.set.completed).length,
-      totalSets: steps.length,
-    }
-  }, [active])
+  // Includes the pending sets, so the notification's "Série feita" works with the app in background.
+  const status = useMemo(() => buildLiveStatus(active), [active])
   const key = status ? JSON.stringify(status) : ''
 
   useEffect(() => {
@@ -362,29 +357,30 @@ const OPTION_BUTTON = 'flex min-h-12 items-center gap-2 rounded-[var(--radius-sm
 const ExerciseCard = memo(function ExerciseCard({
   exercise, collapsed, optionsOpen, barWeight, onToggleCollapsed, onToggleOptions, onReplace, onPlates, onRecordVideo, onPlayVideo,
 }: ExerciseCardProps) {
-  const { addSet, removeSet, duplicateSet, applySetToFollowing, updateExerciseNotes, setRestSeconds, insertWarmupSets } = useSessionStore(
+  const { addSet, removeSet, duplicateSet, applySetToFollowing, updateExerciseNotes, setRestSeconds } = useSessionStore(
     useShallow((state) => ({
       addSet: state.addSet, removeSet: state.removeSet, duplicateSet: state.duplicateSet,
       applySetToFollowing: state.applySetToFollowing, updateExerciseNotes: state.updateExerciseNotes,
-      setRestSeconds: state.setRestSeconds, insertWarmupSets: state.insertWarmupSets,
+      setRestSeconds: state.setRestSeconds,
     }))
   )
-  const suggestion = useMemo(
+  const baseSuggestion = useMemo(
     () => getProgressionSuggestion(exercise.previousSets ?? [], exercise.targetMaxReps ?? 12, exercise.progression),
     [exercise.previousSets, exercise.targetMaxReps, exercise.progression]
   )
+  const suggestion = useReadinessSuggestion(baseSuggestion)
   const panelId = `exercise-${exercise.exerciseId}-sets`
   const optionsId = `exercise-${exercise.exerciseId}-options`
   const doneCount = exercise.sets.filter((set) => set.completed).length
   const workSet = exercise.sets.find((set) => (set.setType ?? 'normal') !== 'warmup')
   const workWeight = workSet?.weight ?? 0
-  const warmupPreview = generateWarmupSets(workWeight, barWeight)
   const videoTarget = [...exercise.sets].reverse().find((set) => set.completed) ?? exercise.sets.find((set) => !set.completed) ?? exercise.sets[0]
   const videos = exercise.sets.map((set, index) => ({ set, index })).filter((item) => item.set.videoId)
   const allDone = doneCount === exercise.sets.length && exercise.sets.length > 0
 
   return (
     <section className={cn('tile !p-0', exercise.supersetId && 'shadow-[inset_3px_0_0_var(--accent-fill)]')} aria-label={exercise.exerciseName}>
+      <AutoWarmup exercise={exercise} barWeight={barWeight} />
       <div className="flex items-center gap-1 py-3 pl-5 pr-2">
         <button
           type="button"
@@ -399,8 +395,12 @@ const ExerciseCard = memo(function ExerciseCard({
             </span>
             <span className="title-3 block truncate">{exercise.exerciseName}</span>
           </span>
-          <span className={cn('caption numeric flex-none rounded-full px-2.5 py-1 font-semibold', allDone ? 'bg-[var(--success-fill)] text-white' : 'bg-[var(--fill)] text-[var(--muted)]')}>
-            {doneCount}/{exercise.sets.length}
+          <span key={allDone ? 'done' : 'open'} className={cn('flex-none', allDone && 'ring-done')} aria-label={`${doneCount} de ${exercise.sets.length} séries`}>
+            <CircularProgress value={doneCount} max={exercise.sets.length} size={38} strokeWidth={3.5} color="var(--success-fill)">
+              {allDone
+                ? <span className="flex h-[26px] w-[26px] items-center justify-center rounded-full bg-[var(--success-fill)] text-white"><Check size={15} strokeWidth={3} aria-hidden /></span>
+                : <span className="numeric text-[12px] font-semibold text-[var(--muted-strong)]" aria-hidden>{doneCount}/{exercise.sets.length}</span>}
+            </CircularProgress>
           </span>
           <ChevronDown size={18} aria-hidden className={cn('flex-none text-[var(--muted)] transition-transform duration-300', !collapsed && 'rotate-180')} />
         </button>
@@ -417,16 +417,8 @@ const ExerciseCard = memo(function ExerciseCard({
       </div>
 
       {optionsOpen && (
-        <div id={optionsId} className="grid grid-cols-2 gap-2 border-t border-[var(--separator)] p-4">
-          <button
-            type="button"
-            disabled={warmupPreview.length === 0}
-            onClick={() => { insertWarmupSets(exercise.exerciseId, warmupPreview); onToggleOptions(exercise.exerciseId) }}
-            className={cn(OPTION_BUTTON, 'disabled:opacity-40')}
-            aria-label={warmupPreview.length ? `Gerar aquecimento: ${warmupPreview.map((step) => `${formatDecimal(step.weight)} kg por ${step.reps}`).join(', ')}` : 'Gerar aquecimento (defina a carga primeiro)'}
-          >
-            <Flame size={16} aria-hidden />Aquecimento
-          </button>
+        <div id={optionsId} className="panel-in grid grid-cols-2 gap-2 border-t border-[var(--separator)] p-4">
+          <WarmupOptions exercise={exercise} barWeight={barWeight} onDone={() => onToggleOptions(exercise.exerciseId)} />
           <button type="button" onClick={() => onPlates(exercise.exerciseName, workWeight)} className={OPTION_BUTTON}>
             <Scale size={16} aria-hidden />Anilhas
           </button>
@@ -436,11 +428,7 @@ const ExerciseCard = memo(function ExerciseCard({
           <button type="button" disabled={!videoTarget} onClick={() => videoTarget && onRecordVideo(exercise.exerciseId, videoTarget.id)} className={OPTION_BUTTON}>
             <Video size={16} aria-hidden />Gravar vídeo
           </button>
-          {warmupPreview.length > 0 && (
-            <p className="footnote col-span-2 px-1 text-[var(--muted)]">
-              Aquecimento sugerido: {warmupPreview.map((step) => `${formatDecimal(step.weight)} kg × ${step.reps}`).join(' → ')}
-            </p>
-          )}
+          <DiscomfortOption exercise={exercise} />
           <label className="col-span-2 mt-2 block">
             <span className="footnote mb-1.5 flex items-center gap-1.5 font-semibold text-[var(--muted)]"><NotebookPen size={14} aria-hidden />Notas e ajustes</span>
             <textarea
@@ -459,12 +447,8 @@ const ExerciseCard = memo(function ExerciseCard({
       )}
 
       {!collapsed && (
-        <div id={panelId} className="border-t border-[var(--separator)] px-3 pb-4 pt-3 sm:px-4">
-          {suggestion && (
-            <p className={cn('footnote mb-3 rounded-[var(--radius-sm)] px-3.5 py-2.5', suggestion.progressed ? 'bg-[color-mix(in_srgb,var(--success-fill)_12%,transparent)] text-[var(--success)]' : 'bg-[var(--fill)] text-[var(--muted-strong)]')}>
-              <strong className="font-semibold">{formatDecimal(suggestion.weight)} kg sugeridos.</strong> {suggestion.reason}
-            </p>
-          )}
+        <div id={panelId} className="panel-in border-t border-[var(--separator)] px-3 pb-4 pt-3 sm:px-4">
+          <ExerciseTrainingHints exercise={exercise} suggestion={suggestion} barWeight={barWeight} onReplace={onReplace} />
           <div className={cn(SET_GRID, 'caption mb-1 px-1 text-center font-semibold text-[var(--muted)]')} aria-hidden>
             <span>Tipo</span><span>Antes</span><span>Kg</span><span>Reps</span><span>RIR</span><span />
           </div>
@@ -550,11 +534,20 @@ const SetRow = memo(function SetRow({ exerciseId, exerciseName, restSeconds, set
   const shortLabel = setType?.shortLabel ?? 'N'
   const isWarmup = (set.setType ?? 'normal') === 'warmup'
   const isRecord = set.completed && !isWarmup && recordForSet(best, set.weight, set.reps) != null
+  const [justDone, setJustDone] = useState(0)
+
+  useEffect(() => {
+    if (!justDone) return
+    const timer = setTimeout(() => setJustDone(0), 700)
+    return () => clearTimeout(timer)
+  }, [justDone])
 
   function toggleDone() {
     const completing = !set.completed
     completeSet(exerciseId, set.id)
     if (completing) {
+      setJustDone(Date.now())
+      haptic('medium')
       startRest(restSeconds)
       const kind = isWarmup ? null : recordForSet(best, set.weight, set.reps)
       if (kind) {
@@ -567,11 +560,14 @@ const SetRow = memo(function SetRow({ exerciseId, exerciseName, restSeconds, set
           },
         }))
       }
-    } else if (useTimerStore.getState().restRunning) stopRest()
+    } else {
+      haptic('light')
+      if (useTimerStore.getState().restRunning) stopRest()
+    }
   }
 
   return (
-    <div data-completed={set.completed} className={cn(SET_GRID, 'set-table-row p-1')}>
+    <div data-completed={set.completed} data-just-done={justDone > 0} className={cn(SET_GRID, 'set-table-row p-1')}>
       <span className="relative flex h-11 items-center justify-center rounded-[10px] text-[14px] font-semibold text-[var(--accent)] focus-within:ring-2 focus-within:ring-[var(--accent)]">
         <span aria-hidden>{shortLabel}</span>
         <select
@@ -597,6 +593,7 @@ const SetRow = memo(function SetRow({ exerciseId, exerciseName, restSeconds, set
         aria-pressed={set.completed}
         className={cn(
           'mx-auto flex h-11 w-11 items-center justify-center rounded-full transition-[background-color,transform] duration-200 active:scale-90',
+          justDone > 0 && 'check-pop',
           set.completed ? 'bg-[var(--success-fill)] text-[var(--on-success)]' : 'text-[var(--muted)] shadow-[inset_0_0_0_1.5px_var(--separator)]'
         )}
         aria-label={set.completed ? `Desmarcar série ${number}` : `Concluir série ${number}`}
@@ -665,6 +662,15 @@ function Summary({ summary, onClose }: { summary: SummaryData; onClose: () => vo
     [`${summary.sets}`, 'Séries'],
     heartRate ? [`${heartRate} bpm`, 'FC média'] : [`+${summary.xp}`, 'XP'],
   ]
+  // Same stats as numbers, so the tiles can count up on entrance.
+  const animated: Array<[number, (value: number) => string]> = [
+    [summary.volume, (value) => formatVolume(Math.round(value))],
+    [summary.duration, (value) => formatDuration(Math.round(value))],
+    [summary.sets, (value) => `${Math.round(value)}`],
+    heartRate ? [heartRate, (value) => `${Math.round(value)} bpm`] : [summary.xp, (value) => `+${Math.round(value)}`],
+  ]
+
+  useEffect(() => { haptic('success') }, [])
 
   async function share() {
     setSharing(true)
@@ -688,8 +694,9 @@ function Summary({ summary, onClose }: { summary: SummaryData; onClose: () => vo
 
   return (
     <div className="apple-page page-narrow flex min-h-dvh items-center !pb-10">
+      <Confetti big={summary.prs > 0} />
       <div className="rise-in w-full text-center">
-        <span className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-b from-[#ffd60a] to-[#ff9f0a] text-[#1d1d1f]" aria-hidden><Trophy size={36} strokeWidth={2} /></span>
+        <span className="record-pop mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-b from-[#ffd60a] to-[#ff9f0a] text-[#1d1d1f] shadow-[0_10px_30px_rgba(255,159,10,0.4)]" aria-hidden><Trophy size={36} strokeWidth={2} /></span>
         <p className="eyebrow mt-8">{summary.workoutName}</p>
         <h1 className="display mt-1">Treino concluído</h1>
         <p className="lede mx-auto mt-3 max-w-xs">
@@ -698,10 +705,10 @@ function Summary({ summary, onClose }: { summary: SummaryData; onClose: () => vo
             : 'Consistência registrada. Bom trabalho.'}
         </p>
         <dl className="mt-10 grid grid-cols-2 gap-3 text-left">
-          {stats.map(([value, label]) => (
-            <div key={label} className="tile tile-compact flex flex-col-reverse">
+          {stats.map(([value, label], index) => (
+            <div key={label} className="summary-stat tile tile-compact flex flex-col-reverse" style={{ '--i': index } as React.CSSProperties}>
               <dt className="subhead text-[var(--muted)]">{label}</dt>
-              <dd className="stat text-[28px]">{value}</dd>
+              <dd className="stat text-[28px]"><CountUp value={animated[index][0]} format={animated[index][1]} finalText={value} delay={300 + index * 90} /></dd>
             </div>
           ))}
         </dl>

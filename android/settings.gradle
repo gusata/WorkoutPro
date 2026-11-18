@@ -3,3 +3,7 @@ include ':capacitor-cordova-android-plugins'
 project(':capacitor-cordova-android-plugins').projectDir = new File('./capacitor-cordova-android-plugins/')
 
 apply from: 'capacitor.settings.gradle'
+
+// Wear OS companion (same applicationId as the phone app, required by the Wearable Data Layer).
+// Kept here, not in capacitor.settings.gradle, because `npx cap sync` regenerates that file.
+include ':wear'

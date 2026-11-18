@@ -52,6 +52,8 @@ export interface Exercise {
   equipment?: string
   machineSettings?: string
   alternatives?: string[]
+  /** Stable id of the bundled exercise library entry (lib/exerciseLibrary.ts) this exercise was added from. */
+  libraryId?: string
   createdAt: Date
   updatedAt: Date
 }
@@ -68,9 +70,20 @@ export interface CompletedSet {
   completedAt: Date
 }
 
+export type DiscomfortLocation = 'ombro' | 'cotovelo' | 'joelho' | 'lombar' | 'punho' | 'quadril' | 'pescoco' | 'outro'
+
+/** Pain/discomfort flagged on an exercise during a session (1 = leve, 2 = moderado, 3 = forte). */
+export interface DiscomfortNote {
+  location: DiscomfortLocation
+  intensity: 1 | 2 | 3
+  note?: string
+}
+
 export interface SessionExercise {
   exerciseId: string
   sets: CompletedSet[]
+  /** Optional: discomfort the user flagged on this exercise in this session. */
+  discomfort?: DiscomfortNote | null
 }
 
 export interface WorkoutSession {
@@ -143,6 +156,20 @@ export interface UserPreferences {
   birthYear?: number | null
   /** Measured maximum heart rate; overrides the age-based estimate. */
   maxHeartRate?: number | null
+  /** Heart rate under which a rest counts as recovered; default from resting / max HR. */
+  recoveryHeartRate?: number | null
+  /** Weekly hard-set target range per muscle; missing muscles use the defaults. */
+  muscleTargets?: Partial<Record<MuscleGroup, MuscleTargetRange>>
+  /** Exercise ids whose warm-up sets are generated automatically in execution. */
+  autoWarmupExerciseIds?: string[]
+  /** Finished/ended training blocks, newest first. */
+  trainingBlockHistory?: TrainingBlock[]
+}
+
+/** Weekly hard working sets considered productive for a muscle. */
+export interface MuscleTargetRange {
+  min: number
+  max: number
 }
 
 export type CardioActivity =
@@ -185,7 +212,15 @@ export interface TrainingBlock {
   weeklyIncreasePct: number
   /** Last week is a deload at ~50% of the base volume. */
   deloadLastWeek: boolean
+  /** Optional block goal (hipertrofia, força, condicionamento...). */
+  goal?: TrainingGoal
+  /** Routines the block covers; empty/undefined = every routine. */
+  workoutIds?: string[]
+  /** When the block was ended (set on blocks moved to the history). */
+  endedAt?: Date | null
 }
+
+export type TrainingGoal = 'hipertrofia' | 'forca' | 'condicionamento'
 
 export type MediaKind = 'video' | 'photo'
 
@@ -270,6 +305,12 @@ export interface ActiveExercise {
   progression?: ProgressionRule
   sets: ActiveSet[]
   restSeconds: number
+  /** Optional: discomfort flagged during this session. */
+  discomfort?: DiscomfortNote | null
+  /** Warm-up sets were already generated once (auto warm-up runs only once). */
+  warmupGenerated?: boolean
+  /** Optional: equipment of the exercise (used to round warm-ups to plates). */
+  equipment?: string
 }
 
 export interface ActiveSet {

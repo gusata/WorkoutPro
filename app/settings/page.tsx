@@ -13,10 +13,13 @@ import { setTheme, useThemePreference } from '@/components/layout/ThemeToggle'
 import { useReduceEffects } from '@/components/layout/VisualEffectsToggle'
 import { DEFAULT_BAR_WEIGHT, getWeeklyGoals } from '@/lib/preferences'
 import { formatTimeOfDay, reminderTime, remindersSupported, usualTrainingTime } from '@/lib/reminders'
+import { ReminderScheduleStatus } from '@/components/layout/ReminderScheduleStatus'
 import { healthPlatformName, latestRestingHeartRate } from '@/lib/health'
 import { useHealthConnect } from '@/components/health/useHealthConnect'
 import { DEFAULT_CARDIO_GOAL, maxHeartRate, zoneRanges } from '@/lib/cardio'
 import { DecimalInput } from '@/components/ui/DecimalInput'
+import { recoveryThreshold } from '@/lib/liveHeart'
+import { MuscleTargetsSettings } from '@/components/insights/MuscleTargetsSettings'
 import type { ThemePreference } from '@/lib/theme'
 import type { WeeklyGoals } from '@/types'
 
@@ -86,6 +89,7 @@ export default function SettingsPage() {
   }
 
   const maxHr = maxHeartRate(preferences)
+  const defaultRecovery = recoveryThreshold({ maxHr, restingHr })
   const thisYear = new Date().getFullYear()
 
   async function importNow() {
@@ -126,7 +130,7 @@ export default function SettingsPage() {
         <h2 id="reminders-title" className="list-header">Lembretes</h2>
         <div className="list">
           <Row label="Lembrete de treino" detail={scheduledCount === 0 ? 'Defina dias nas suas rotinas para receber lembretes.' : `Em dias com treino agendado, às ${formatTimeOfDay(time)}.`}>
-            <Switch label="Lembrete de treino" checked={reminders.enabled} onChange={(enabled) => void updatePreferences({ reminders: { ...reminders, enabled } })} />
+            <Switch label="Ativar lembrete de treino" checked={reminders.enabled} onChange={(enabled) => void updatePreferences({ reminders: { ...reminders, enabled } })} />
           </Row>
           {reminders.enabled && (
             <Row label="Horário" htmlFor="reminder-time" detail={reminders.timeOfDay == null ? (usual != null ? `Automático: 30 min antes do seu horário habitual (${formatTimeOfDay(usual)}).` : 'Automático: 17:30 até aprender seu horário.') : 'Horário fixo.'}>
@@ -153,6 +157,7 @@ export default function SettingsPage() {
             ? 'Exemplo: “Hoje é dia de Superior A”, no horário em que você costuma treinar.'
             : 'No navegador, o lembrete aparece na tela Hoje. Notificações agendadas funcionam no app instalado.'}
         </p>
+        <ReminderScheduleStatus />
       </section>
 
       <section aria-labelledby="health-title" className="stack-section">
@@ -160,7 +165,7 @@ export default function SettingsPage() {
         <div className="list">
           <Row
             label={`Sincronizar com ${healthPlatformName()}`}
-            detail={health && !health.available ? health.reason : 'Importa peso e % de gordura, grava seu peso e mostra a frequência cardíaca média dos treinos.'}
+            detail={health && !health.available ? health.reason : 'Importa peso e % de gordura, grava seu peso e seus treinos de musculação e mostra a frequência cardíaca ao vivo.'}
           >
             <Switch label={`Sincronizar com ${healthPlatformName()}`} checked={Boolean(preferences.healthSync)} disabled={busy || healthConnect.busy || !health?.available} onChange={(enabled) => void toggleHealth(enabled)} />
           </Row>
@@ -208,6 +213,26 @@ export default function SettingsPage() {
               className="field numeric !min-h-11 !w-24 !px-3 text-center"
             />
           </Row>
+          <Row
+            label="FC de recuperação"
+            htmlFor="recovery-hr"
+            detail={preferences.recoveryHeartRate
+              ? 'No descanso, avisa quando a FC cai abaixo deste valor.'
+              : defaultRecovery
+                ? `No descanso, avisa quando a FC cai abaixo de ${defaultRecovery} bpm (repouso + 40% da reserva). Ajuste se quiser.`
+                : 'No descanso, avisa quando a FC cai abaixo deste valor. Sem FC máxima, informe um valor.'}
+          >
+            <DecimalInput
+              id="recovery-hr"
+              integer
+              min={0}
+              max={200}
+              value={preferences.recoveryHeartRate ?? null}
+              placeholder={defaultRecovery ? String(defaultRecovery) : '—'}
+              onValueChange={(value) => { if (value === 0 || (value >= 60 && value <= 200)) void updatePreferences({ recoveryHeartRate: value || null }) }}
+              className="field numeric !min-h-11 !w-24 !px-3 text-center"
+            />
+          </Row>
         </div>
         {maxHr ? (
           <p className="list-footer">Zonas: {zoneRanges(maxHr).map((zone, index) => `Z${index + 1} ${zone.from}–${zone.to}`).join(' · ')} bpm.</p>
@@ -241,6 +266,8 @@ export default function SettingsPage() {
         </div>
         <p className="list-footer">Equipamentos disponíveis personalizam as sugestões de exercícios.</p>
       </section>
+
+      <MuscleTargetsSettings />
 
       <section aria-labelledby="appearance-title" className="stack-section">
         <h2 id="appearance-title" className="list-header">Aparência</h2>

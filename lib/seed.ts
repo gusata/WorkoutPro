@@ -1,17 +1,18 @@
 import { db } from '@/lib/db'
 import type { Exercise, Workout } from '@/types'
 
-const EXERCISE_SEEDS = [
-  { id: 'demo-exercise-bench-press', name: 'Supino Reto', muscleGroup: 'Peitoral' },
-  { id: 'demo-exercise-chest-fly', name: 'Crucifixo', muscleGroup: 'Peitoral' },
-  { id: 'demo-exercise-triceps-pushdown', name: 'Tríceps Pulley', muscleGroup: 'Tríceps' },
-  { id: 'demo-exercise-shoulder-press', name: 'Desenvolvimento', muscleGroup: 'Ombros' },
-  { id: 'demo-exercise-lat-pulldown', name: 'Puxada Frontal', muscleGroup: 'Costas' },
-  { id: 'demo-exercise-bent-row', name: 'Remada Curvada', muscleGroup: 'Costas' },
-  { id: 'demo-exercise-biceps-curl', name: 'Rosca Direta', muscleGroup: 'Bíceps' },
-  { id: 'demo-exercise-squat', name: 'Agachamento', muscleGroup: 'Quadríceps' },
-  { id: 'demo-exercise-leg-press', name: 'Leg Press', muscleGroup: 'Quadríceps' },
-  { id: 'demo-exercise-stiff', name: 'Stiff', muscleGroup: 'Posterior' },
+// libraryId links each demo exercise to lib/exerciseLibrary.ts (technique, illustrations).
+export const EXERCISE_SEEDS = [
+  { id: 'demo-exercise-bench-press', name: 'Supino Reto', muscleGroup: 'Peitoral', libraryId: 'supino-reto-barra' },
+  { id: 'demo-exercise-chest-fly', name: 'Crucifixo', muscleGroup: 'Peitoral', libraryId: 'crucifixo-reto-halteres' },
+  { id: 'demo-exercise-triceps-pushdown', name: 'Tríceps Pulley', muscleGroup: 'Tríceps', libraryId: 'triceps-pulley' },
+  { id: 'demo-exercise-shoulder-press', name: 'Desenvolvimento', muscleGroup: 'Ombros', libraryId: 'desenvolvimento-halteres' },
+  { id: 'demo-exercise-lat-pulldown', name: 'Puxada Frontal', muscleGroup: 'Costas', libraryId: 'puxada-frontal' },
+  { id: 'demo-exercise-bent-row', name: 'Remada Curvada', muscleGroup: 'Costas', libraryId: 'remada-curvada-barra' },
+  { id: 'demo-exercise-biceps-curl', name: 'Rosca Direta', muscleGroup: 'Bíceps', libraryId: 'rosca-direta-barra' },
+  { id: 'demo-exercise-squat', name: 'Agachamento', muscleGroup: 'Quadríceps', libraryId: 'agachamento-livre' },
+  { id: 'demo-exercise-leg-press', name: 'Leg Press', muscleGroup: 'Quadríceps', libraryId: 'leg-press-45' },
+  { id: 'demo-exercise-stiff', name: 'Stiff', muscleGroup: 'Posterior', libraryId: 'stiff-barra' },
 ] as const
 
 export async function seedDemoData() {

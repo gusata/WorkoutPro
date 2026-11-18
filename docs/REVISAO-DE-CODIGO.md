@@ -64,13 +64,12 @@ Os riscos críticos encontrados na primeira auditoria foram corrigidos no códig
 
 ## Riscos residuais, sem bloqueio
 
-- O Android Lint mantém 30 avisos não bloqueantes em splashes duplicados/fora de densidade e XMLs legados. Os cinco assets-fonte atuais são cópias da mesma imagem; uma arte-fonte separada para foreground/background/dark é necessária para eliminar esses avisos com qualidade.
+- O Android Lint caiu de 34 para 8 avisos não bloqueantes após a arte definitiva de ícone/splash (vetores gerados por `scripts/generate-brand-assets.mjs`); restam avisos de versão do Gradle, `SDK_INT` obsoleto e recursos legados do template Capacitor.
 - Plugins Capacitor podem emitir notas internas de APIs obsoletas; o código Java próprio não emite mais a nota anterior.
 - Sync deve ser ensaiado contra um Supabase de staging depois de aplicar `supabase/schema.sql`; o script com duas contas está pronto, mas depende de credenciais externas.
-- Playwright cobre persistência e fluxos locais; sync real e comportamento do timer ainda exigem staging e aparelho Android físico.
+- Playwright cobre persistência e fluxos locais; timer, notificações e lembretes têm fluxos Maestro e testes instrumentados que precisam de emulador/aparelho reserva para rodar (`npm run test:device`). Sync real ainda exige staging.
 
 ## Próxima evolução recomendada
 
 1. Executar a verificação já automatizada em um Supabase de staging com duas contas descartáveis.
-2. Fornecer artes independentes de ícone foreground/background, monocromático e splash claro/escuro.
-3. Fazer smoke test do AAB em aparelhos Android reais antes da faixa interna da loja.
+2. Fazer smoke test do AAB em aparelhos Android reais antes da faixa interna da loja.

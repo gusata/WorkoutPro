@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { ChevronRight, Plus, RefreshCw } from 'lucide-react'
 import { format, formatDistanceToNow, isToday, subDays } from 'date-fns'
@@ -11,12 +11,12 @@ import { LineChart } from '@/components/insights/LineChart'
 import { Hypnogram, MiniBars, ScoreRing, StageLegend, formatHm } from '@/components/health/charts'
 import { CardioDetail, CardioForm } from '@/components/health/CardioSheets'
 import { useHealthConnect } from '@/components/health/useHealthConnect'
-import { useLiveHealth } from '@/components/health/useLiveHealth'
 import { HeartRateCard } from '@/components/health/HeartRateCard'
 import { useHealthStore } from '@/stores/useHealthStore'
 import { useCardioStore } from '@/stores/useCardioStore'
 import { useProfileStore } from '@/stores/useProfileStore'
-import { computeReadiness } from '@/lib/readiness'
+import { useTodayReadiness } from '@/components/health/useReadiness'
+import { ReadinessRecommendation } from '@/components/health/ReadinessRecommendation'
 import { cardioLabel, cardioMinutesInWeek, DEFAULT_CARDIO_GOAL, formatDistance, formatMinutes } from '@/lib/cardio'
 import { trendPer30Days } from '@/lib/insights'
 import { formatDecimal } from '@/lib/utils'
@@ -26,25 +26,14 @@ export default function HealthPage() {
   const health = useHealthStore()
   const cardio = useCardioStore((state) => state.sessions)
   const profile = useProfileStore((state) => state.profile)
-  const sessions = useProfileStore((state) => state.sessions)
   const connect = useHealthConnect()
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<CardioSession | null>(null)
   const [selected, setSelected] = useState<CardioSession | null>(null)
   const [now] = useState(() => new Date())
-  useLiveHealth()
 
   const lastNight = health.sleep.at(-1) ?? null
-  const recentSets = useMemo(() => sessions
-    .filter((session) => session.finishedAt && now.getTime() - new Date(session.finishedAt).getTime() < 86_400_000)
-    .reduce((total, session) => total + session.exercises.reduce((sum, item) => sum + item.sets.filter((set) => (set.setType ?? 'normal') !== 'warmup').length, 0), 0), [now, sessions])
-  const readiness = useMemo(() => computeReadiness({
-    hrv: health.hrv,
-    restingHr: health.restingHr,
-    sleep: lastNight ? { asleep: lastNight.asleep, deep: lastNight.minutes.deep, rem: lastNight.minutes.rem, hasStages: lastNight.hasStages, end: lastNight.end } : null,
-    recentSets,
-    now,
-  }), [health.hrv, health.restingHr, lastNight, now, recentSets])
+  const readiness = useTodayReadiness(now)
 
   const cardioGoal = profile?.preferences?.weeklyGoals?.cardioMinutes ?? DEFAULT_CARDIO_GOAL
   const cardioMinutes = cardioMinutesInWeek(cardio, now)
@@ -85,7 +74,7 @@ export default function HealthPage() {
 
       {connect.healthSync && health.missing.length > 0 && connect.availability?.available && (
         <section className="tile tile-compact mt-6 flex items-center gap-4" aria-label="Permissões">
-          <p className="subhead flex-1">Faltam permissões para ler {health.missing.length} tipo{health.missing.length > 1 ? 's' : ''} de dado (como sono e treinos).</p>
+          <p className="subhead flex-1">Faltam permissões para {health.missing.length} tipo{health.missing.length > 1 ? 's' : ''} de dado (como sono, treinos ou gravar seus treinos).</p>
           <Button size="sm" onClick={connect.connect} disabled={connect.busy}>Permitir</Button>
         </section>
       )}
@@ -95,7 +84,7 @@ export default function HealthPage() {
       {connected && (
         <div className="mt-4 flex items-center justify-between px-1">
           <p className="footnote text-[var(--muted)]">
-            {health.status === 'loading' ? 'Atualizando...' : (health.lastLive ?? health.lastRefreshed) ? `Atualizado ${formatDistanceToNow(Math.max(health.lastLive ?? 0, health.lastRefreshed ?? 0), { locale: ptBR, addSuffix: true })} · automático a cada minuto` : 'Ainda não atualizado'}
+            {health.status === 'loading' ? 'Atualizando...' : (health.lastLive ?? health.lastRefreshed) ? `Atualizado ${formatDistanceToNow(Math.max(health.lastLive ?? 0, health.lastRefreshed ?? 0), { locale: ptBR, addSuffix: true })} · automático` : 'Ainda não atualizado'}
           </p>
           <button type="button" onClick={refresh} disabled={health.status === 'loading'} className="link text-[15px] disabled:opacity-40">
             <RefreshCw size={14} className={health.status === 'loading' ? 'animate-spin' : ''} aria-hidden />Atualizar
@@ -122,6 +111,7 @@ export default function HealthPage() {
                 <p className="subhead mt-1.5 text-[var(--muted)]">{readiness.advice}</p>
               </div>
             </div>
+            <ReadinessRecommendation readiness={readiness} />
             <dl className="mt-6">
               {readiness.components.map((component) => (
                 <div key={component.key} className="flex items-center gap-3 border-t border-[var(--separator)] py-3">

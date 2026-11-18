@@ -59,7 +59,7 @@ export async function importTrainingCsv(text: string): Promise<CsvImportPreview>
     const groupedExercises = new Map<string, typeof group>()
     for (const record of group) { const exercise = exercises.get(normalized(cell(record, 'exercise_title', 'exercise_name'))); if (exercise) groupedExercises.set(exercise.id, [...(groupedExercises.get(exercise.id) ?? []), record]) }
     const sessionExercises = [...groupedExercises].map(([exerciseId, sets]) => ({ exerciseId, sets: sets.map((record) => ({ id: generateId(), weight: number(cell(record, 'weight_kg', 'weight')), reps: number(cell(record, 'reps')), rpe: cell(record, 'rpe') ? number(cell(record, 'rpe')) : null, rir: null, setType: cell(record, 'set_type') === 'warmup' ? 'warmup' as const : 'normal' as const, completedAt: finishedAt })) }))
-    const totalVolume = sessionExercises.flatMap((item) => item.sets).reduce((sum, set) => sum + set.weight * set.reps, 0)
+    const totalVolume = sessionExercises.flatMap((item) => item.sets).filter((set) => set.setType !== 'warmup').reduce((sum, set) => sum + set.weight * set.reps, 0)
     sessions.push({ id: generateId(), workoutId: workout.id, startedAt: safeStart, finishedAt, duration: Math.max(0, Math.floor((finishedAt.getTime() - safeStart.getTime()) / 1000)), exercises: sessionExercises, totalVolume, xpEarned: 0, notes: cell(group[0], 'description', 'workout_notes'), updatedAt: now })
   }
   await db.transaction('rw', [db.exercises, db.workouts, db.sessions, db.profile, db.syncQueue], async () => {
