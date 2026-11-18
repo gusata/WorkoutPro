@@ -1,11 +1,13 @@
 'use client'
 
 import { Suspense, useMemo, useState } from 'react'
-import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Link2, Play, Plus, Search, Trash2 } from 'lucide-react'
+import { Play, Plus, Search } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { DecimalInput } from '@/components/ui/DecimalInput'
+import { useUndoToast } from '@/components/ui/UndoToast'
+import { SortablePlan } from '@/components/training/SortablePlan'
+import { WorkoutBadge, WorkoutTitle } from '@/components/training/WorkoutBadge'
+import { haptic } from '@/lib/haptics'
 import { Modal } from '@/components/ui/Modal'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { LibraryPicker } from '@/components/library/LibraryPicker'
@@ -38,7 +40,7 @@ function WorkoutDetail() {
     () => (workout?.exerciseIds.map((exerciseId) => exercises.find((item) => item.id === exerciseId)).filter((item): item is Exercise => Boolean(item)) ?? []),
     [exercises, workout]
   )
-  const [expanded, setExpanded] = useState<string | null>(null)
+  const undo = useUndoToast()
   const [adding, setAdding] = useState(false)
   const [query, setQuery] = useState('')
   const [addSource, setAddSource] = useState<'mine' | 'library'>('mine')
@@ -66,10 +68,24 @@ function WorkoutDetail() {
   }
 
   async function start() { await startSession(workout!, workoutExercises); router.push('/workouts/execute') }
-  function move(exerciseId: string, direction: -1 | 1) {
-    const index = workout!.exerciseIds.indexOf(exerciseId); const next = index + direction
-    if (next < 0 || next >= workout!.exerciseIds.length) return
-    const order = [...workout!.exerciseIds]; const [item] = order.splice(index, 1); order.splice(next, 0, item); void reorderExercises(id, order)
+  async function toggleSuperset(exerciseId: string, index: number) {
+    const config = configFor(exerciseId)
+    if (config.supersetId) return changeConfig(exerciseId, { supersetId: null })
+    // Links with the exercise above (or below, for the first one), joining its group if it has one.
+    const neighbor = workoutExercises[index === 0 ? 1 : index - 1]
+    if (!neighbor) return changeConfig(exerciseId, { supersetId: `superset-${exerciseId}` })
+    const groupId = configFor(neighbor.id).supersetId ?? `superset-${neighbor.id}`
+    const configs = workout!.exerciseIds.map((currentId) => currentId === exerciseId || currentId === neighbor.id ? { ...configFor(currentId), supersetId: groupId } : configFor(currentId))
+    haptic('light')
+    await updateWorkout(id, { exerciseConfigs: configs })
+  }
+
+  async function removeWithUndo(exercise: Exercise) {
+    const previousIds = [...workout!.exerciseIds]
+    const previousConfigs = workout!.exerciseIds.map((currentId) => configFor(currentId))
+    haptic('warning')
+    await removeExerciseFromWorkout(id, exercise.id)
+    undo.show(`${exercise.name} removido`, () => updateWorkout(id, { exerciseIds: previousIds, exerciseConfigs: previousConfigs }))
   }
   function toggleDay(day: number) {
     const next = days.includes(day) ? days.filter((item) => item !== day) : [...days, day].sort((a, b) => a - b)
@@ -85,8 +101,9 @@ function WorkoutDetail() {
       />
 
       <header className="hero">
-        <p className="eyebrow-muted flex items-center gap-2"><span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ background: workout.color }} />Rotina</p>
-        <h1 className="display mt-1">{workout.name}</h1>
+        <WorkoutBadge id={workout.id} name={workout.name} color={workout.color} size={72} />
+        <p className="eyebrow-muted mt-6">Rotina</p>
+        <h1 className="display mt-1"><WorkoutTitle id={workout.id}>{workout.name}</WorkoutTitle></h1>
         <p className="lede mt-3">{workoutExercises.length} exercícios · {totalSets} séries{muscles.length ? ` · ${muscles.slice(0, 3).join(', ')}` : ''}</p>
         <Button size="lg" className="mt-7" onClick={start} disabled={workoutExercises.length === 0}><Play size={15} fill="currentColor" aria-hidden />Começar treino</Button>
       </header>
@@ -111,43 +128,19 @@ function WorkoutDetail() {
 
       <section aria-labelledby="plan-title" className="stack-section">
         <SectionHeader id="plan-title" title="Plano." action={<button type="button" onClick={() => setAdding(true)} className="link -mb-2.5 text-[17px]"><Plus size={17} aria-hidden />Adicionar</button>} />
-        <div className="list">
-          {workoutExercises.map((exercise, index) => {
-            const config = configFor(exercise.id); const open = expanded === exercise.id
-            return (
-              <div key={exercise.id} className="grouped-row">
-                <div className="flex items-center gap-1 py-2 pl-5 pr-2">
-                  <span aria-hidden className="numeric w-6 flex-none text-[15px] font-semibold text-[var(--muted)]">{index + 1}</span>
-                  <button type="button" onClick={() => setExpanded(open ? null : exercise.id)} aria-expanded={open} className="flex min-h-14 min-w-0 flex-1 items-center gap-2 text-left">
-                    <span className="min-w-0 flex-1">
-                      <span className="headline block truncate">{exercise.name}</span>
-                      <span className="footnote text-[var(--muted)]">{config.targetSets} × {config.minReps}–{config.maxReps} · {config.restSeconds}s{config.supersetId ? ' · Supersérie' : ''}</span>
-                    </span>
-                    <ChevronDown size={17} aria-hidden className={`flex-none text-[var(--muted)] transition-transform ${open ? 'rotate-180' : ''}`} />
-                  </button>
-                  <button type="button" onClick={() => move(exercise.id, -1)} disabled={index === 0} className="flex h-11 w-9 flex-none items-center justify-center text-[var(--muted)] disabled:opacity-20" aria-label={`Mover ${exercise.name} para cima`}><ArrowUp size={17} aria-hidden /></button>
-                  <button type="button" onClick={() => move(exercise.id, 1)} disabled={index === workoutExercises.length - 1} className="flex h-11 w-9 flex-none items-center justify-center text-[var(--muted)] disabled:opacity-20" aria-label={`Mover ${exercise.name} para baixo`}><ArrowDown size={17} aria-hidden /></button>
-                </div>
-                {open && (
-                  <div className="border-t border-[var(--separator)] bg-[var(--surface-2)] px-5 py-4">
-                    <div className="grid grid-cols-4 gap-2">
-                      <MiniNumber label="Séries" value={config.targetSets} onChange={(value) => void changeConfig(exercise.id, { targetSets: value })} />
-                      <MiniNumber label="Mín." value={config.minReps} onChange={(value) => void changeConfig(exercise.id, { minReps: value })} />
-                      <MiniNumber label="Máx." value={config.maxReps} onChange={(value) => void changeConfig(exercise.id, { maxReps: value })} />
-                      <MiniNumber label="Pausa (s)" value={config.restSeconds} step={15} onChange={(value) => void changeConfig(exercise.id, { restSeconds: value })} />
-                    </div>
-                    <div className="mt-4 flex flex-wrap items-center gap-2">
-                      <button type="button" onClick={() => void changeConfig(exercise.id, { supersetId: config.supersetId ? null : `superset-${Math.max(0, index - 1)}` })} aria-pressed={Boolean(config.supersetId)} className="chip"><Link2 size={15} aria-hidden />Supersérie</button>
-                      <Link href={`/exercises/detail?id=${exercise.id}`} className="link px-2 text-[15px]">Histórico e força<ChevronRight size={15} aria-hidden /></Link>
-                      <button type="button" onClick={() => void removeExerciseFromWorkout(id, exercise.id)} className="ml-auto flex min-h-11 items-center gap-1 rounded-full px-2 text-[15px] text-[var(--danger)]"><Trash2 size={15} aria-hidden />Remover</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-          {workoutExercises.length === 0 && <p className="subhead p-8 text-center text-[var(--muted)]">Adicione exercícios para começar.</p>}
-        </div>
+        {workoutExercises.length > 1 && <p className="footnote -mt-1 mb-3 px-1 text-[var(--muted)]">Arraste pela alça para reordenar. Deslize para a esquerda para remover.</p>}
+        {workoutExercises.length > 0
+          ? (
+            <SortablePlan
+              exercises={workoutExercises}
+              configFor={configFor}
+              onReorder={(order) => void reorderExercises(id, order)}
+              onChangeConfig={(exerciseId, updates) => void changeConfig(exerciseId, updates)}
+              onToggleSuperset={(exerciseId, index) => void toggleSuperset(exerciseId, index)}
+              onRemove={(exercise) => void removeWithUndo(exercise)}
+            />
+          )
+          : <div className="list"><p className="subhead p-8 text-center text-[var(--muted)]">Adicione exercícios para começar.</p></div>}
       </section>
 
       <section aria-labelledby="recent-title" className="stack-section">
@@ -165,6 +158,8 @@ function WorkoutDetail() {
           {recent.length === 0 && <p className="subhead p-8 text-center text-[var(--muted)]">Seu primeiro registro aparecerá aqui.</p>}
         </div>
       </section>
+
+      {undo.toast}
 
       <Modal open={adding} onClose={() => setAdding(false)} title="Adicionar exercício">
         <SegmentedControl label="Origem do exercício" value={addSource} onChange={setAddSource} options={[{ value: 'mine', label: 'Meus exercícios' }, { value: 'library', label: 'Biblioteca' }]} className="mb-4" />
@@ -187,15 +182,6 @@ function WorkoutDetail() {
         </>)}
       </Modal>
     </div>
-  )
-}
-
-function MiniNumber({ label, value, step = 1, onChange }: { label: string; value: number; step?: number; onChange: (value: number) => void }) {
-  return (
-    <label>
-      <span className="caption mb-1 block font-semibold text-[var(--muted)]">{label}</span>
-      <DecimalInput integer min={1} value={value} onValueChange={onChange} title={step > 1 ? `Em passos de ${step}` : undefined} className="set-field !bg-[var(--surface)]" />
-    </label>
   )
 }
 

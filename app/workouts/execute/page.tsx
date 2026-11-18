@@ -30,6 +30,9 @@ import { DEFAULT_BAR_WEIGHT } from '@/lib/preferences'
 import { buildLiveStatus } from '@/lib/liveStatus'
 import { formatDecimal, formatDuration, formatVolume } from '@/lib/utils'
 import { cn } from '@/lib/cn'
+import { haptic } from '@/lib/haptics'
+import { CircularProgress } from '@/components/ui/Progress'
+import { Confetti, CountUp } from '@/components/workout/Celebration'
 import type { ActiveExercise, ActiveSession, ActiveSet, Exercise } from '@/types'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -98,7 +101,7 @@ export default function ExecutePage() {
     function onRecord(event: Event) {
       const detail = (event as CustomEvent<Omit<RecordToastData, 'id'>>).detail
       setRecord({ ...detail, id: Date.now() })
-      if ('vibrate' in navigator) navigator.vibrate?.([30, 60, 30, 60, 120])
+      haptic('success')
     }
     window.addEventListener(RECORD_EVENT, onRecord)
     return () => window.removeEventListener(RECORD_EVENT, onRecord)
@@ -244,7 +247,7 @@ export default function ExecutePage() {
             <strong className="numeric block text-[17px] font-semibold leading-5">{progress}%<span className="ml-1 text-[13px] font-normal text-[var(--muted)]">concluído</span></strong>
             <span className="footnote numeric text-[var(--muted)]">{formatVolume(totals.volume)} levantados</span>
           </div>
-          <Button onClick={finishRequest} disabled={finishing}>{finishing ? 'Salvando...' : 'Finalizar'}</Button>
+          <Button onClick={() => { haptic('medium'); finishRequest() }} disabled={finishing}>{finishing ? 'Salvando...' : 'Finalizar'}</Button>
         </div>
         <RestTimerOverlay />
         <RestHeartHint />
@@ -392,8 +395,12 @@ const ExerciseCard = memo(function ExerciseCard({
             </span>
             <span className="title-3 block truncate">{exercise.exerciseName}</span>
           </span>
-          <span className={cn('caption numeric flex-none rounded-full px-2.5 py-1 font-semibold', allDone ? 'bg-[var(--success-fill)] text-white' : 'bg-[var(--fill)] text-[var(--muted)]')}>
-            {doneCount}/{exercise.sets.length}
+          <span key={allDone ? 'done' : 'open'} className={cn('flex-none', allDone && 'ring-done')} aria-label={`${doneCount} de ${exercise.sets.length} séries`}>
+            <CircularProgress value={doneCount} max={exercise.sets.length} size={38} strokeWidth={3.5} color="var(--success-fill)">
+              {allDone
+                ? <span className="flex h-[26px] w-[26px] items-center justify-center rounded-full bg-[var(--success-fill)] text-white"><Check size={15} strokeWidth={3} aria-hidden /></span>
+                : <span className="numeric text-[12px] font-semibold text-[var(--muted-strong)]" aria-hidden>{doneCount}/{exercise.sets.length}</span>}
+            </CircularProgress>
           </span>
           <ChevronDown size={18} aria-hidden className={cn('flex-none text-[var(--muted)] transition-transform duration-300', !collapsed && 'rotate-180')} />
         </button>
@@ -410,7 +417,7 @@ const ExerciseCard = memo(function ExerciseCard({
       </div>
 
       {optionsOpen && (
-        <div id={optionsId} className="grid grid-cols-2 gap-2 border-t border-[var(--separator)] p-4">
+        <div id={optionsId} className="panel-in grid grid-cols-2 gap-2 border-t border-[var(--separator)] p-4">
           <WarmupOptions exercise={exercise} barWeight={barWeight} onDone={() => onToggleOptions(exercise.exerciseId)} />
           <button type="button" onClick={() => onPlates(exercise.exerciseName, workWeight)} className={OPTION_BUTTON}>
             <Scale size={16} aria-hidden />Anilhas
@@ -440,7 +447,7 @@ const ExerciseCard = memo(function ExerciseCard({
       )}
 
       {!collapsed && (
-        <div id={panelId} className="border-t border-[var(--separator)] px-3 pb-4 pt-3 sm:px-4">
+        <div id={panelId} className="panel-in border-t border-[var(--separator)] px-3 pb-4 pt-3 sm:px-4">
           <ExerciseTrainingHints exercise={exercise} suggestion={suggestion} barWeight={barWeight} onReplace={onReplace} />
           <div className={cn(SET_GRID, 'caption mb-1 px-1 text-center font-semibold text-[var(--muted)]')} aria-hidden>
             <span>Tipo</span><span>Antes</span><span>Kg</span><span>Reps</span><span>RIR</span><span />
@@ -527,11 +534,20 @@ const SetRow = memo(function SetRow({ exerciseId, exerciseName, restSeconds, set
   const shortLabel = setType?.shortLabel ?? 'N'
   const isWarmup = (set.setType ?? 'normal') === 'warmup'
   const isRecord = set.completed && !isWarmup && recordForSet(best, set.weight, set.reps) != null
+  const [justDone, setJustDone] = useState(0)
+
+  useEffect(() => {
+    if (!justDone) return
+    const timer = setTimeout(() => setJustDone(0), 700)
+    return () => clearTimeout(timer)
+  }, [justDone])
 
   function toggleDone() {
     const completing = !set.completed
     completeSet(exerciseId, set.id)
     if (completing) {
+      setJustDone(Date.now())
+      haptic('medium')
       startRest(restSeconds)
       const kind = isWarmup ? null : recordForSet(best, set.weight, set.reps)
       if (kind) {
@@ -544,11 +560,14 @@ const SetRow = memo(function SetRow({ exerciseId, exerciseName, restSeconds, set
           },
         }))
       }
-    } else if (useTimerStore.getState().restRunning) stopRest()
+    } else {
+      haptic('light')
+      if (useTimerStore.getState().restRunning) stopRest()
+    }
   }
 
   return (
-    <div data-completed={set.completed} className={cn(SET_GRID, 'set-table-row p-1')}>
+    <div data-completed={set.completed} data-just-done={justDone > 0} className={cn(SET_GRID, 'set-table-row p-1')}>
       <span className="relative flex h-11 items-center justify-center rounded-[10px] text-[14px] font-semibold text-[var(--accent)] focus-within:ring-2 focus-within:ring-[var(--accent)]">
         <span aria-hidden>{shortLabel}</span>
         <select
@@ -574,6 +593,7 @@ const SetRow = memo(function SetRow({ exerciseId, exerciseName, restSeconds, set
         aria-pressed={set.completed}
         className={cn(
           'mx-auto flex h-11 w-11 items-center justify-center rounded-full transition-[background-color,transform] duration-200 active:scale-90',
+          justDone > 0 && 'check-pop',
           set.completed ? 'bg-[var(--success-fill)] text-[var(--on-success)]' : 'text-[var(--muted)] shadow-[inset_0_0_0_1.5px_var(--separator)]'
         )}
         aria-label={set.completed ? `Desmarcar série ${number}` : `Concluir série ${number}`}
@@ -642,6 +662,15 @@ function Summary({ summary, onClose }: { summary: SummaryData; onClose: () => vo
     [`${summary.sets}`, 'Séries'],
     heartRate ? [`${heartRate} bpm`, 'FC média'] : [`+${summary.xp}`, 'XP'],
   ]
+  // Same stats as numbers, so the tiles can count up on entrance.
+  const animated: Array<[number, (value: number) => string]> = [
+    [summary.volume, (value) => formatVolume(Math.round(value))],
+    [summary.duration, (value) => formatDuration(Math.round(value))],
+    [summary.sets, (value) => `${Math.round(value)}`],
+    heartRate ? [heartRate, (value) => `${Math.round(value)} bpm`] : [summary.xp, (value) => `+${Math.round(value)}`],
+  ]
+
+  useEffect(() => { haptic('success') }, [])
 
   async function share() {
     setSharing(true)
@@ -665,8 +694,9 @@ function Summary({ summary, onClose }: { summary: SummaryData; onClose: () => vo
 
   return (
     <div className="apple-page page-narrow flex min-h-dvh items-center !pb-10">
+      <Confetti big={summary.prs > 0} />
       <div className="rise-in w-full text-center">
-        <span className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-b from-[#ffd60a] to-[#ff9f0a] text-[#1d1d1f]" aria-hidden><Trophy size={36} strokeWidth={2} /></span>
+        <span className="record-pop mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-b from-[#ffd60a] to-[#ff9f0a] text-[#1d1d1f] shadow-[0_10px_30px_rgba(255,159,10,0.4)]" aria-hidden><Trophy size={36} strokeWidth={2} /></span>
         <p className="eyebrow mt-8">{summary.workoutName}</p>
         <h1 className="display mt-1">Treino concluído</h1>
         <p className="lede mx-auto mt-3 max-w-xs">
@@ -675,10 +705,10 @@ function Summary({ summary, onClose }: { summary: SummaryData; onClose: () => vo
             : 'Consistência registrada. Bom trabalho.'}
         </p>
         <dl className="mt-10 grid grid-cols-2 gap-3 text-left">
-          {stats.map(([value, label]) => (
-            <div key={label} className="tile tile-compact flex flex-col-reverse">
+          {stats.map(([value, label], index) => (
+            <div key={label} className="summary-stat tile tile-compact flex flex-col-reverse" style={{ '--i': index } as React.CSSProperties}>
               <dt className="subhead text-[var(--muted)]">{label}</dt>
-              <dd className="stat text-[28px]">{value}</dd>
+              <dd className="stat text-[28px]"><CountUp value={animated[index][0]} format={animated[index][1]} finalText={value} delay={300 + index * 90} /></dd>
             </div>
           ))}
         </dl>

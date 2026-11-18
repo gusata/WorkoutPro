@@ -168,8 +168,9 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
       const remaining = Math.ceil((restEndAt - Date.now()) / 1000)
       if (remaining <= 0) {
         set({ restRunning: false, restSeconds: 0, restEndAt: null })
-        if (typeof window !== 'undefined' && 'vibrate' in navigator) {
-          navigator.vibrate([200, 100, 200, 100, 200])
+        if (typeof window !== 'undefined') {
+          import('@/lib/haptics').then(({ haptic }) => haptic('warning')).catch(() => undefined)
+          if ('vibrate' in navigator) navigator.vibrate([200, 100, 200, 100, 200])
         }
         if (
           typeof window !== 'undefined' &&

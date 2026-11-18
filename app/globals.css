@@ -174,7 +174,10 @@ body {
   touch-action: pan-y;
 }
 
-a, button, input, textarea, select { font: inherit; letter-spacing: inherit; color: inherit; }
+/* In the base layer so Tailwind text-* utilities on buttons/links can override the inherited color. */
+@layer base {
+  a, button, input, textarea, select { font: inherit; letter-spacing: inherit; color: inherit; }
+}
 a { text-decoration: none; }
 button, a { -webkit-user-select: none; user-select: none; cursor: pointer; }
 button:disabled { cursor: default; }
@@ -467,6 +470,117 @@ html[data-theme='dark'] .segmented > button[aria-pressed='true'] { background: #
 .pressable:active { transform: scale(.97); }
 
 /* ------------------------------------------------------------------------ */
+/* Training interactions                                                     */
+/* ------------------------------------------------------------------------ */
+
+/* Routine card tinted by the routine's own color (--wc). */
+.workout-card {
+  position: relative; border-radius: var(--radius-xl);
+  background:
+    linear-gradient(115deg, var(--wc-tint) 0%, var(--wc-fade) 45%, transparent 75%),
+    var(--surface);
+}
+html[data-theme='dark'] .workout-card {
+  background:
+    linear-gradient(115deg, var(--wc-tint-strong) 0%, var(--wc-fade) 45%, transparent 75%),
+    var(--surface);
+}
+.workout-badge {
+  display: inline-flex; flex: none; align-items: center; justify-content: center;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--wc) 78%, #fff) 0%, var(--wc) 55%, color-mix(in srgb, var(--wc) 80%, #000) 100%);
+  color: #fff; font-family: var(--font-display); font-weight: 700; letter-spacing: -0.03em;
+  box-shadow: 0 6px 18px var(--wc-glow, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+/* "Hoje" hero: full-bleed routine color. */
+.today-card {
+  position: relative; overflow: hidden; border-radius: var(--radius-xl); color: #fff;
+  background:
+    radial-gradient(90% 120% at 100% 0%, rgba(255, 255, 255, 0.22) 0%, transparent 55%),
+    linear-gradient(150deg, color-mix(in srgb, var(--wc) 88%, #fff) 0%, var(--wc) 45%, color-mix(in srgb, var(--wc) 62%, #000) 100%);
+}
+.today-card::after {
+  content: ''; position: absolute; right: -40px; bottom: -60px; width: 220px; height: 220px; border-radius: 50%;
+  border: 28px solid rgba(255, 255, 255, 0.08); pointer-events: none;
+}
+.muscle-chip {
+  display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 980px;
+  background: var(--fill); color: var(--muted-strong); font-size: 12px; font-weight: 600; letter-spacing: -0.004em; white-space: nowrap;
+}
+.week-dots { display: flex; gap: 4px; }
+.week-dot {
+  display: inline-flex; width: 20px; height: 20px; align-items: center; justify-content: center; border-radius: 50%;
+  font-size: 10px; font-weight: 700; color: var(--muted); background: var(--fill);
+}
+.week-dot[data-on='true'] { background: var(--wc); color: #fff; }
+.week-dot[data-today='true'] { box-shadow: 0 0 0 1.5px var(--background), 0 0 0 3px var(--foreground); }
+
+/* Animated expand/collapse without measuring: grid rows 0fr -> 1fr. */
+.collapsible { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 320ms var(--ease-spring); }
+.collapsible[data-open='true'] { grid-template-rows: 1fr; }
+.collapsible > * { min-height: 0; overflow: hidden; }
+
+/* Sortable list rows */
+.sortable-row { touch-action: pan-y; }
+.sortable-row[data-dragging='true'] {
+  z-index: 20; border-radius: var(--radius-md);
+  background: var(--background-elevated);
+  box-shadow: var(--shadow-float), 0 0 0 0.5px var(--glass-edge);
+  transform-origin: center;
+}
+.sortable-row[data-dragging='true']::before { display: none; }
+.drag-handle { touch-action: none; cursor: grab; }
+.drag-handle:active { cursor: grabbing; }
+.dragging-active, .dragging-active * { cursor: grabbing !important; -webkit-user-select: none; user-select: none; }
+
+/* Superset bracket in the plan list */
+.superset-rail { position: absolute; left: 10px; width: 3px; border-radius: 3px; background: var(--accent-fill); }
+
+/* Completing a set */
+@keyframes check-pop { 0% { transform: scale(.7); } 45% { transform: scale(1.18); } 100% { transform: scale(1); } }
+@keyframes check-ring { from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--success-fill) 55%, transparent); } to { box-shadow: 0 0 0 14px transparent; } }
+@keyframes row-sweep { from { background-size: 0% 100%; } to { background-size: 100% 100%; } }
+.check-pop { animation: check-pop 380ms var(--ease-spring), check-ring 600ms ease-out; }
+.set-table-row[data-completed='true'][data-just-done='true'] {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--success-fill) 12%, transparent), color-mix(in srgb, var(--success-fill) 12%, transparent)) no-repeat left / 0% 100%;
+  animation: row-sweep 420ms var(--ease-out) forwards;
+}
+@keyframes ring-done { 0% { transform: scale(1); } 40% { transform: scale(1.15); } 100% { transform: scale(1); } }
+.ring-done { animation: ring-done 500ms var(--ease-spring); }
+
+/* Expanding panels in the workout screen */
+@keyframes panel-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.panel-in { animation: panel-in 280ms var(--ease-spring) both; }
+
+/* Undo toast countdown */
+@keyframes undo-countdown { from { width: 100%; } to { width: 0%; } }
+.undo-countdown { animation: undo-countdown linear forwards; }
+
+/* Staggered list entrance */
+@keyframes stagger-in { from { opacity: 0; transform: translateY(12px) scale(.985); } to { opacity: 1; transform: none; } }
+.stagger-in { animation: stagger-in 520ms var(--ease-spring) both; animation-delay: calc(var(--i, 0) * 45ms); }
+
+/* Stepper hold-to-repeat buttons */
+.stepper-btn {
+  display: flex; height: 36px; width: 36px; flex: none; align-items: center; justify-content: center; border-radius: 50%;
+  background: var(--fill); color: var(--accent); transition: transform 120ms ease, background-color 150ms ease;
+  touch-action: manipulation;
+}
+.stepper-btn:active { transform: scale(.88); background: var(--fill-strong); }
+.stepper-btn:disabled { opacity: .3; }
+
+/* Confetti canvas on the summary screen */
+.confetti-canvas { position: fixed; inset: 0; z-index: 60; pointer-events: none; width: 100%; height: 100%; }
+
+/* Count-up stat entrance */
+.summary-stat { animation: stagger-in 600ms var(--ease-spring) both; animation-delay: calc(300ms + var(--i, 0) * 90ms); }
+
+/* View transitions between the routine list and its detail page */
+::view-transition-group(.morph) { animation-duration: 420ms; animation-timing-function: var(--ease-spring); }
+::view-transition-image-pair(.morph) { isolation: auto; }
+::view-transition-old(.morph), ::view-transition-new(.morph) { animation-duration: 300ms; mix-blend-mode: normal; }
+.reduce-effects::view-transition-group(*), .reduce-effects::view-transition-old(*), .reduce-effects::view-transition-new(*) { animation: none !important; }
+
+/* ------------------------------------------------------------------------ */
 /* Breakpoints                                                               */
 /* ------------------------------------------------------------------------ */
 
@@ -482,4 +596,5 @@ html[data-theme='dark'] .segmented > button[aria-pressed='true'] { background: #
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
 }
